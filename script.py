@@ -126,8 +126,7 @@ def validate_restaurant_data(restaurant_data):
             raise ValueError("Invalid latitude or longitude value")
     
     # Validate JSON fields
-    json_fields = ['cuisines', 'hours', 'images', 'tags', 'popularDishes', 'specialties', 
-                   'instagramReviews', 'mapsReviews', 'redditReviews']
+    json_fields = ['cuisines', 'hours', 'images', 'tags', 'popularDishes', 'specialties']
     for field in json_fields:
         if field in restaurant_data:
             restaurant_data[field] = parse_json_field(restaurant_data[field])
