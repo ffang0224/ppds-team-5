@@ -6,7 +6,6 @@ Lasly, our last entity which is the playlists entity, which is designed to organ
 # Why we chose a NoSQL type database over SQL:
 Firstly, our entities and their attributes include a lot of referencing to other entities. Moreover, a NoSQL type database stores data in collections of documents rather than storing data in tables with rows and columns like SQL. That being said, it makes it easier to nest these entities and access their attributes. 
 Also, considering that we have certain attributes that may not necessarily fit neatly into a a fixed schema or table, thus we are working with unstructured data. For instance, when it comes to the reviews that the users will write, one user may include more details, such as a comment, stars, and a rating, while others may keep it more brief with just a rating. For this reason we choose a NoSQL type database, as it can handle data that may have varying attributes without having to define a structured/fixed schema.
-![image](https://github.com/user-attachments/assets/91824e7e-9025-449d-be31-dad45cfb7eb9)
 
 # Set Up and Run Database with these steps:
 *To continue*
