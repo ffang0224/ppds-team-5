@@ -1,11 +1,11 @@
 email,firstName,lastName,playlists,points,username
-fakeuser1@example.com,John,Doe,"[{""playlistId"": ""/playlists/LseRlb7DX2XVOfSGq2Au""}]","{""generalPoints"": 100, ""postPoints"": 50, ""reviewPoints"": 25}",john_doe
-fakeuser2@example.com,Jane,Smith,"[{""playlistId"": ""/playlists/LseRlb7DX2XVOfSGq2Au""}]","{""generalPoints"": 200, ""postPoints"": 75, ""reviewPoints"": 50}",jane_smith
-fakeuser3@example.com,Alice,Johnson,"[{""playlistId"": ""/playlists/LseRlb7DX2XVOfSGq2Au""}]","{""generalPoints"": 150, ""postPoints"": 60, ""reviewPoints"": 30}",alice_johnson
-fakeuser4@example.com,Bob,Williams,"[{""playlistId"": ""/playlists/LseRlb7DX2XVOfSGq2Au""}]","{""generalPoints"": 180, ""postPoints"": 40, ""reviewPoints"": 20}",bob_williams
-fakeuser5@example.com,Charlie,Brown,"[{""playlistId"": ""/playlists/LseRlb7DX2XVOfSGq2Au""}]","{""generalPoints"": 90, ""postPoints"": 30, ""reviewPoints"": 10}",charlie_brown
-fakeuser6@example.com,Emily,Miller,"[{""playlistId"": ""/playlists/LseRlb7DX2XVOfSGq2Au""}]","{""generalPoints"": 170, ""postPoints"": 60, ""reviewPoints"": 40}",emily_miller
-fakeuser7@example.com,David,Davis,"[{""playlistId"": ""/playlists/LseRlb7DX2XVOfSGq2Au""}]","{""generalPoints"": 110, ""postPoints"": 45, ""reviewPoints"": 20}",david_davis
-fakeuser8@example.com,Sophia,Garcia,"[{""playlistId"": ""/playlists/LseRlb7DX2XVOfSGq2Au""}]","{""generalPoints"": 120, ""postPoints"": 55, ""reviewPoints"": 35}",sophia_garcia
-fakeuser9@example.com,Michael,Wilson,"[{""playlistId"": ""/playlists/LseRlb7DX2XVOfSGq2Au""}]","{""generalPoints"": 130, ""postPoints"": 50, ""reviewPoints"": 30}",michael_wilson
-fakeuser10@example.com,Olivia,Martinez,"[{""playlistId"": ""/playlists/LseRlb7DX2XVOfSGq2Au""}]","{""generalPoints"": 140, ""postPoints"": 60, ""reviewPoints"": 40}",olivia_martinez
+fakeuser1@example.com,John,Doe,"[{""playlistName"": ""Road Trip Hits""}]","{""generalPoints"": 100, ""postPoints"": 50, ""reviewPoints"": 25}",john_doe
+fakeuser2@example.com,Jane,Smith,"[{""playlistName"": ""Italian Dining Tunes""}]","{""generalPoints"": 200, ""postPoints"": 75, ""reviewPoints"": 50}",jane_smith
+fakeuser3@example.com,Alice,Johnson,"[{""playlistName"": ""Mexican Fiesta""}]","{""generalPoints"": 150, ""postPoints"": 60, ""reviewPoints"": 30}",alice_johnson
+fakeuser4@example.com,Bob,Williams,"[{""playlistName"": ""Chinese Tea House""}]","{""generalPoints"": 180, ""postPoints"": 40, ""reviewPoints"": 20}",bob_williams
+fakeuser5@example.com,Charlie,Brown,"[{""playlistName"": ""Japanese Zen""}]","{""generalPoints"": 90, ""postPoints"": 30, ""reviewPoints"": 10}",charlie_brown
+fakeuser6@example.com,Emily,Miller,"[{""playlistName"": ""French Elegance""}]","{""generalPoints"": 170, ""postPoints"": 60, ""reviewPoints"": 40}",emily_miller
+fakeuser7@example.com,David,Davis,"[{""playlistName"": ""Thai Beats""}]","{""generalPoints"": 110, ""postPoints"": 45, ""reviewPoints"": 20}",david_davis
+fakeuser8@example.com,Sophia,Garcia,"[{""playlistName"": ""Indian Ragas""}]","{""generalPoints"": 120, ""postPoints"": 55, ""reviewPoints"": 35}",sophia_garcia
+fakeuser9@example.com,Michael,Wilson,"[{""playlistName"": ""Mediterranean Lounge""}]","{""generalPoints"": 130, ""postPoints"": 50, ""reviewPoints"": 30}",michael_wilson
+fakeuser10@example.com,Olivia,Martinez,"[{""playlistName"": ""Greek Tavern Tunes""}]","{""generalPoints"": 140, ""postPoints"": 60, ""reviewPoints"": 40}",olivia_martinez
