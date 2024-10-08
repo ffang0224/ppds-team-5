@@ -326,11 +326,6 @@ def add_restaurant_manual():
     restaurant_data['popularDishes'] = get_json_input('popular dishes', is_list=True)
     restaurant_data['specialties'] = get_json_input('specialties', is_list=True)
     
-    # Review fields
-    restaurant_data['instagramReviews'] = get_json_input('Instagram reviews', is_review=True)
-    restaurant_data['mapsReviews'] = get_json_input('Maps reviews', is_review=True)
-    restaurant_data['redditReviews'] = get_json_input('Reddit reviews', is_review=True)
-    
     # Boolean fields
     boolean_fields = ['takeout', 'delivery', 'dineIn', 'outdoorSeating', 'wifi', 'parking', 
                       'vegetarian', 'vegan', 'glutenFree', 'halal', 'kosher']
