@@ -11,6 +11,12 @@ firebase_admin.initialize_app(cred)
 # Get a Firestore client
 db = firestore.client()
 
+# Global variables for collection names
+RESTAURANT_COLLECTION = "restaurants"
+PLAYLIST_COLLECTION = "playlists"
+USER_COLLECTION = "users"
+REVIEW_COLLECTION = "reviews"
+
 # Parse JSON if string (source: https://stackoverflow.com/questions/152580/whats-the-canonical-way-to-check-for-type-in-python)
 def parse_json_field(field):
     if isinstance(field, str):
@@ -396,13 +402,7 @@ def add_user_csv():
         for row in csv_reader:
             add_user_to_firestore(row, USER_COLLECTION, PLAYLIST_COLLECTION)
     print("All users from CSV have been added to Firestore.")
-    
-    
-    
-# Global variables for collection names
-RESTAURANT_COLLECTION = "restaurants"
-PLAYLIST_COLLECTION = "playlists"
-USER_COLLECTION = "users"
+
 
 # List all
 
@@ -420,6 +420,76 @@ def list_all_users(collection_name):
     docs = db.collection(collection_name).stream()
     for doc in docs:
         print(f"User ID: {doc.id}, Data: {doc.to_dict()}\n")
+        
+def list_all_reviews():
+    docs = db.collection(REVIEW_COLLECTION).stream()
+    for doc in docs:
+        print(f"Review ID: {doc.id}, Data: {doc.to_dict()}\n")
+
+# REVIEW SECTION        
+        
+def add_review_to_firestore(review_data):
+    doc_ref = db.collection(REVIEW_COLLECTION).document()
+    doc_ref.set(review_data)
+    print(f"Review added to collection {REVIEW_COLLECTION} with ID: {doc_ref.id}")
+    return doc_ref.id
+
+def update_review(review_id, updated_data):
+    doc_ref = db.collection(REVIEW_COLLECTION).document(review_id)
+    doc_ref.update(updated_data)
+    print(f"Review with ID {review_id} updated successfully.")
+
+def delete_review(review_id):
+    db.collection(REVIEW_COLLECTION).document(review_id).delete()
+    print(f"Review with ID {review_id} deleted successfully.")
+
+def read_review(review_id):
+    doc = db.collection(REVIEW_COLLECTION).document(review_id).get()
+    if doc.exists:
+        print(f"Review data: {doc.to_dict()}")
+    else:
+        print(f"No review found with ID {review_id}")
+
+def add_review_manual():
+    print("\nAdding a new review manually:")
+    review_data = {}
+    review_data['restaurantId'] = input("Enter restaurant ID: ")
+    review_data['source'] = input("Enter review source (instagram/maps/reddit): ")
+    review_data['commentAuthor'] = input("Enter comment author: ")
+    review_data['review'] = input("Enter review text: ")
+    if review_data['source'] == 'maps':
+        review_data['stars'] = float(input("Enter stars (1-5): "))
+    if review_data['source'] == 'reddit':
+        review_data['restaurantImage'] = input("Enter restaurant image URL: ")
+        review_data['summary'] = input("Enter summary: ")
+    
+    add_review_to_firestore(review_data)
+    
+def add_reviews_from_csv():
+    csv_file_path = input("Enter the path to your reviews CSV file: ")
+    with open(csv_file_path, 'r') as csv_file:
+        csv_reader = csv.DictReader(csv_file)
+        for row in csv_reader:
+            review_data = {
+                'restaurantId': row['restaurantId'],
+                'source': row['source'],
+                'commentAuthor': row['commentAuthor'],
+                'review': row['review']
+            }
+
+            # Add optional fields if they exist and are not empty
+            if row.get('stars') and row['stars'].strip():
+                review_data['stars'] = float(row['stars'])
+            if row.get('restaurantImage') and row['restaurantImage'].strip():
+                review_data['restaurantImage'] = row['restaurantImage']
+            if row.get('summary') and row['summary'].strip():
+                review_data['summary'] = row['summary']
+
+            # Add the review to Firestore
+            doc_ref = db.collection('reviews').add(review_data)
+            print(f"Added review with ID: {doc_ref[1].id}")
+
+
 
 def print_menu():
     print("\n--- Restaurant, Playlist, and User Manager ---")
@@ -441,13 +511,19 @@ def print_menu():
     print("16. Delete a user")
     print("17. Read a user")
     print("18. List all users\n")
-    print("19. Exit")
+    print("19. Add a new review manually")
+    print("20. Update a review")
+    print("21. Delete a review")
+    print("22. Read a review")
+    print("23. List all reviews")
+    print("24. Add reviews from CSV")
+    print("25. Exit")
 
 # Main program loop
 def main():
     while True:
         print_menu()
-        choice = input("Enter your choice (1-19): ")
+        choice = input("Enter your choice (1-24): ")
         
         if choice == '1':
             add_restaurant_manual()
@@ -554,8 +630,29 @@ def main():
         elif choice == '18':
             list_all_users(USER_COLLECTION)
         elif choice == '19':
-            print("Exiting the program. Goodbye!")
-            break
+            add_review_manual()
+        elif choice == '20':
+            review_id = input("Enter review ID to update: ")
+            updated_data = {}
+            print("Enter updated data (leave blank to skip):")
+            for field in ['commentAuthor', 'review', 'stars', 'restaurantImage', 'summary']:
+                value = input(f"Enter new {field}: ")
+                if value:
+                    updated_data[field] = value
+            update_review(review_id, updated_data)
+        elif choice == '21':
+            review_id = input("Enter review ID to delete: ")
+            delete_review(review_id)
+        elif choice == '22':
+            review_id = input("Enter review ID to read: ")
+            read_review(review_id)
+        elif choice == '23':
+            list_all_reviews()
+        elif choice == '24':
+            add_reviews_from_csv()
+        elif choice == '25':
+            print('Closing manager, thank you!')
+            return
         else:
             print("Invalid choice. Please try again.")
 

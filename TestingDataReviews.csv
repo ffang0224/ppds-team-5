@@ -1,0 +1,22 @@
+restaurantId,source,commentAuthor,review,stars,restaurantImage,summary
+BIGAPP001,instagram,nycfoodie,"Classic NYC diner experience!",,, 
+BIGAPP001,maps,tourist123,"Great breakfast, friendly staff",4,,
+BIGAPP001,reddit,reddit_user,"24/7 comfort food heaven",,"https://example.com/bigapplediner.jpg","Authentic NYC diner"
+PASTA001,instagram,pastalov3r,"Best carbonara in NYC!",,, 
+PASTA001,maps,italianfoodcritic,"Authentic flavors, great ambiance",5,,
+PASTA001,reddit,redditfoodie,"Hidden gem for Italian cuisine",,"https://example.com/pastaparadise.jpg","Top-notch Italian restaurant"
+SUSHI001,instagram,sushiexpert,"Melt-in-your-mouth sashimi!",,, 
+SUSHI001,maps,nycgourmet,"Innovative rolls, great sake selection",5,,
+SUSHI001,reddit,redditfoodie2,"Best omakase experience in NYC",,"https://example.com/sushisensation.jpg","High-end sushi restaurant"
+TACO001,instagram,tacolover,"Authentic street tacos in NYC!",,, 
+TACO001,maps,mexifoodie,"Great margaritas and festive atmosphere",4,,
+TACO001,reddit,redditfoodie3,"Best guacamole I've had outside Mexico",,"https://example.com/tacofiesta.jpg","Lively Mexican cantina"
+PETIT001,instagram,frenchfoodie,"Feels like Paris in NYC!",,, 
+PETIT001,maps,nycromantic,"Perfect date night spot, amazing wine list",5,,
+PETIT001,reddit,redditgourmet,"The escargot is to die for",,"https://example.com/lepetitbistro.jpg","Charming French bistro"
+SPICE001,instagram,curryking,"Best butter chicken in NYC!",,, 
+SPICE001,maps,spiceenthusiast,"Extensive menu, great for vegetarians",4,,
+SPICE001,reddit,redditfoodie4,"The naan bread is out of this world",,"https://example.com/spiceroute.jpg","Flavorful Indian cuisine"
+BROOK001,instagram,beerlover,"Great selection of craft beers!",,, 
+BROOK001,maps,nycnightlife,"Cool vibe, awesome brewery tours",4,,
+BROOK001,reddit,redditbrewer,"The perfect spot for beer enthusiasts",,"https://example.com/brooklynbrewery.jpg","Trendy craft brewery"

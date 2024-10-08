@@ -2,7 +2,7 @@
 
 ## Features
 
-- Manage "Users", "Restaurants", and "Playlists" collections (modifiable) on a Google Firebase Firestore NoSQL database.
+- Manage "Users", "Restaurants", "Playlists" and "Reviews" collections (modifiable) on a Google Firebase Firestore NoSQL database.
 - Add new users, restaurants or restaurant playlists.
 - View all existing data in the collections.
 - Update current information on the database.
