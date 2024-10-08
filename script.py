@@ -111,7 +111,7 @@ def validate_restaurant_data(restaurant_data):
             raise ValueError(f"Missing required field: {field}")
     
     # Validate numeric fields
-    numeric_fields = ['latitude', 'longitude', 'averageRating', 'totalReviews']
+    numeric_fields = ['latitude', 'longitude']
     for field in numeric_fields:
         if field in restaurant_data:
             try:
@@ -339,7 +339,7 @@ def add_restaurant_manual():
         restaurant_data[field] = get_boolean_input(field)
     
     # Number fields
-    number_fields = ['latitude', 'longitude', 'averageRating', 'totalReviews']
+    number_fields = ['latitude', 'longitude']
     for field in number_fields:
         restaurant_data[field] = get_number_input(field)
     
@@ -563,7 +563,7 @@ def main():
                     updated_data[field] = get_boolean_input(field)
         
             # Handle number fields
-            number_fields = ['latitude', 'longitude', 'averageRating', 'totalReviews']
+            number_fields = ['latitude', 'longitude']
             for field in number_fields:
                 if input(f"Update {field}? (y/n): ").lower() == 'y':
                     updated_data[field] = get_number_input(field)
