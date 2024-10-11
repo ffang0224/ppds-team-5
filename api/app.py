@@ -89,3 +89,11 @@ async def create_user(user: User):
         db.collection("users").add(user.dict(), user_dict["username"])
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating user: {e}")
+    
+    
+# ref = db.collection("users").document(user_id)
+# ref.update(newdata.dict())
+
+
+# DELETE
+# ref = db.collection("users").document(user_id).delete()
