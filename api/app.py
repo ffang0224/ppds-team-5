@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
 import firebase_admin
 from firebase_admin import credentials, firestore
+from pydantic import BaseModel
 from typing import List, Dict
 
 # Initialize Firebase app
@@ -13,6 +13,15 @@ db = firestore.client()
 
 app = FastAPI()
 
+# Pydantic model to validate incoming user data
+class User(BaseModel):
+    email: str
+    firstName: str
+    lastName: str
+    username: str
+    points: Dict[str, int]  # e.g., {"generalPoints": 100, "postPoints": 50, "reviewPoints": 30}
+    playlists: List[str]  # list of playlist IDs
+
 # Helper function to convert Firestore-specific types to JSON-serializable types
 def convert_to_json_serializable(obj):
     if isinstance(obj, firestore.DocumentReference):
@@ -22,15 +31,6 @@ def convert_to_json_serializable(obj):
     elif isinstance(obj, list):
         return [convert_to_json_serializable(i) for i in obj]  # Recursively handle lists
     return obj  # Return the object as-is if it doesn't need special conversion
-
-# Pydantic model to validate incoming user data
-class User(BaseModel):
-    email: str
-    firstName: str
-    lastName: str
-    username: str
-    points: Dict[str, int]  # e.g., {"generalPoints": 100, "postPoints": 50, "reviewPoints": 30}
-    playlists: List[str]  # list of playlist IDs
 
 # Function to add user to Firestore
 def add_user_to_firestore(user_data, user_collection_name, playlist_collection_name):
@@ -46,15 +46,15 @@ async def root():
 
 
 # Fetch a single user by their username (entity_id)
-@app.get("/users/{username}")
-async def get_user(username: str):
+@app.get("/{collectionName}/{id}")
+async def get_user(collectionName:str, id: str):
     try:
         # Retrieve the user document by username
-        user_doc = db.collection("users").document(username).get()
+        user_doc = db.collection(collectionName).document(id).get()
         
         # Check if the document exists
         if not user_doc.exists:
-            raise HTTPException(status_code=404, detail=f"User with username '{username}' not found")
+            raise HTTPException(status_code=404, detail=f"User with username '{id}' not found")
         
         # Convert Firestore document to dictionary
         user_data = user_doc.to_dict()
@@ -64,17 +64,27 @@ async def get_user(username: str):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving user: {e}")
-    
+
+
 # Fetch all users from Firestore
-@app.get("/users")
-async def get_users():
+@app.get("/{collectionName}")
+async def get_users(collectionName: str):
     try:
-        docs = db.collection("users").stream()
+        docs = db.collection(collectionName).stream()
         users = []
         for doc in docs:
             user_data = doc.to_dict()
             json_friendly_data = {k: convert_to_json_serializable(v) for k, v in user_data.items()}
             users.append(json_friendly_data)
+        if len(users) == 0:
+            raise HTTPException(status_code=404, detail=f"Collection with name '{collectionName}' not found.")
         return users
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching users: {e}")
+    
+@app.post("/users")
+async def create_user(user: User):
+    try:
+        db.collection("users").add(user)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating user: {e}")
