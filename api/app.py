@@ -34,10 +34,10 @@ def convert_to_json_serializable(obj):
 
 # Function to add user to Firestore
 def add_user_to_firestore(user_data, user_collection_name, playlist_collection_name):
-    user_data['playlists'] = [db.collection(playlist_collection_name).document(playlist_id) for playlist_id in user_data['playlists']]
-    doc_ref = db.collection(user_collection_name).document(user_data['username'])
+    user_data.playlists = [db.collection(playlist_collection_name).document(playlist_id) for playlist_id in user_data.playlists]
+    doc_ref = db.collection(user_collection_name).document(user_data.username)
     doc_ref.set(user_data)
-    print(f"User added to collection {user_collection_name} with username: {user_data['username']}")
+    print(f"User added to collection {user_collection_name} with username: {user_data.username}")
 
 # Root endpoint for testing if FastAPI is running
 @app.get("/")
@@ -85,6 +85,7 @@ async def get_users(collectionName: str):
 @app.post("/users")
 async def create_user(user: User):
     try:
-        db.collection("users").add(user)
+        user_dict = user.dict()
+        db.collection("users").add(user.dict(), user_dict["username"])
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating user: {e}")
