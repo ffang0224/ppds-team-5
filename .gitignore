@@ -4,3 +4,4 @@ __pycache__/
 .env
 .vscode/
 firebase_credentials.json
+/python_script/firebase_credentials.json
