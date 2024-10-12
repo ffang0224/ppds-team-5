@@ -89,11 +89,59 @@ async def create_user(user: User):
         db.collection("users").add(user.dict(), user_dict["username"])
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating user: {e}")
-    
-    
+
+
+
+
+
+#Elyazia's Part lines 99-  136  
+class Playlist(BaseModel): 
+    author: str
+    description: str
+    name: str
+    restaurants: List[str]
+    username: str
+
+@app.post("/users/{username}/playlists")
+async def add_playlist(username: str, playlist: Playlist):
+    try:
+        user_ref = db.collection("users").document(username)
+        user_doc = user_ref.get()
+        if not user_doc.exists:  
+            raise HTTPException(status_code=404, detail=f"User with username '{username}' does not exist")
+        playlist_data = playlist.dict()  
+        user_ref.collection("playlists").add(playlist_data)
+        return {"message": "Playlist added successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error adding playlist: {e}")    
+
+@app.put("/users/{username}/playlists/{playlist_id}")
+async def update_playlist(username: str, playlist_id: str, playlist: Playlist):
+    try:
+        user_ref = db.collection("users").document(username)
+        user_doc = user_ref.get()
+        if not user_doc.exists:
+            raise HTTPException(status_code=404, detail=f"User with username '{username}' does not exist")
+
+        playlist_ref = user_ref.collection("playlists").document(playlist_id)
+        playlist_doc = playlist_ref.get()
+        if not playlist_doc.exists:
+            raise HTTPException(status_code=404, detail=f"Playlist with ID '{playlist_id}' does not exist")
+        playlist_data = playlist.dict()
+        playlist_ref.update(playlist_data)
+        return {"message": "Playlist updated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating playlist: {e}")
+
+
+
+
 # ref = db.collection("users").document(user_id)
 # ref.update(newdata.dict())
 
 
 # DELETE
 # ref = db.collection("users").document(user_id).delete()
+
+
+
