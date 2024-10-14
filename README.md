@@ -117,24 +117,32 @@ Below are examples of the key actions for managing reviews:
 - **GET /reviews/**: Retrieves all reviews from the database.
 
 - **POST /reviews/**: Adds a new review.
+
   Example:
+
+  ```json
   {
-  "commentAuthor": "Jane Doe",
-  "restaurantId": "RESTAURANT123",
-  "review": "Great atmosphere and friendly staff!",
-  "source": "maps",
-  "stars": 5
+    "commentAuthor": "Jane Doe",
+    "restaurantId": "RESTAURANT123",
+    "review": "Great atmosphere and friendly staff!",
+    "source": "maps",
+    "stars": 5
   }
+  ```
 
 - **PUT /reviews/{review_id}**: Updates an existing review by its ID.
+
   Example:
+
+  ```json
   {
-  "commentAuthor": "Jane Doe",
-  "restaurantId": "RESTAURANT123",
-  "review": "Updated review text",
-  "source": "maps",
-  "stars": 4
+    "commentAuthor": "Jane Doe",
+    "restaurantId": "RESTAURANT123",
+    "review": "Updated review text",
+    "source": "maps",
+    "stars": 4
   }
+  ```
 
 - **DELETE /reviews/{review_id}**: Deletes a review by its ID.
 
