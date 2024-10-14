@@ -107,7 +107,7 @@ async def add_playlist(username: str, playlist: Playlist):
     try:
         user_ref = db.collection("users").document(username)
         user_doc = user_ref.get()
-        if not user_doc.exists:  
+        if not user_doc.exists:
             raise HTTPException(status_code=404, detail=f"User with username '{username}' does not exist")
         playlist_data = playlist.dict()  
         user_ref.collection("playlists").add(playlist_data)
@@ -134,6 +134,47 @@ async def update_playlist(username: str, playlist_id: str, playlist: Playlist):
         raise HTTPException(status_code=500, detail=f"Error updating playlist: {e}")
 
 
+# Minseok's Part lines 137 - 177
+# Review
+class Review(BaseModel):
+    commentAuthor: str
+    restaurantId: str
+    review: str
+    source: str = None
+    stars: int
+
+# Creating a new review
+@app.post("/reviews")
+async def add_review(review: Review):
+    try:
+        review_data = review.dict()
+        # Add the review to Firestore
+        review_ref = db.collection("reviews").add(review_data)
+        return {"message": "Review added successfully", "review_id": review_ref[1].id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error adding review: {e}")
+
+
+# Update a review
+@app.put("/reviews/{review_id}")
+async def update_review(review_id: str, review: Review):
+    try:
+        # Get the reference to the review document
+        review_ref = db.collection("reviews").document(review_id)
+        review_doc = review_ref.get()
+
+        # Check if the review exists
+        if not review_doc.exists:
+            raise HTTPException(status_code=404, detail=f"Review with ID '{review_id}' not found")
+
+        # Update the review in Firestore
+        review_data = review.dict()
+        review_ref.update(review_data)
+        
+        return {"message": "Review updated successfully", "review_id": review_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating review: {e}")
+    
 
 
 # ref = db.collection("users").document(user_id)
