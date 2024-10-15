@@ -49,7 +49,7 @@ async def root():
 
 # Fetch a single user by their username (entity_id)
 @app.get("/{collectionName}/{id}")
-async def get_user(collectionName:str, id: str):
+async def get_item(collectionName:str, id: str):
     try:
         # Retrieve the user document by username
         user_doc = db.collection(collectionName).document(id).get()
@@ -70,7 +70,7 @@ async def get_user(collectionName:str, id: str):
 
 # Fetch all users from Firestore
 @app.get("/{collectionName}")
-async def get_users(collectionName: str):
+async def get_items(collectionName: str):
     try:
         docs = db.collection(collectionName).stream()
         users = []

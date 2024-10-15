@@ -60,10 +60,10 @@ source .venv/bin/activate
 5. Initialize a Firebase Firestore Instance and download credentials. \
    Add credentials to the root folder with the name _"firebase_credentials.json"_. Credentials can be found under **Project Settings -> Service Accounts**
 
-## Usage
+## Script Usage
 
 To run the script:
-`python3 script.py`
+`python3 python_script/script.py`
 
 Follow the prompts on screen to interact with the database:
 
@@ -108,49 +108,22 @@ Our application provides API endpoints to manage users, reviews, playlists, and 
 
 These actions allow full management of the entities within the database, providing flexibility in how users interact with and modify data.
 
-## Review API Endpoints
+To try it out, use the following command after installing `requirements.txt`:
 
-Below are examples of the key actions for managing reviews:
+```none
+cd api
+uvicorn app:app
+```
 
-- **GET /reviews/{review_id}**: Retrieves a specific review by its ID.
+After this, go to <http://127.0.0.1:8000/docs> to explore all the endpoints.
 
-- **GET /reviews/**: Retrieves all reviews from the database.
+<br>
+<br>
 
-- **POST /reviews/**: Adds a new review.
+Sample data for Postman is included in the API folder. Import the JSON as raw text (just copy and paste into the field) on Postman and run the server to try the API endpoints.
 
-  Example:
-
-  ```json
-  {
-    "commentAuthor": "Jane Doe",
-    "restaurantId": "RESTAURANT123",
-    "review": "Great atmosphere and friendly staff!",
-    "source": "maps",
-    "stars": 5
-  }
-  ```
-
-- **PUT /reviews/{review_id}**: Updates an existing review by its ID.
-
-  Example:
-
-  ```json
-  {
-    "commentAuthor": "Jane Doe",
-    "restaurantId": "RESTAURANT123",
-    "review": "Updated review text",
-    "source": "maps",
-    "stars": 4
-  }
-  ```
-
-- **DELETE /reviews/{review_id}**: Deletes a review by its ID.
-
-## Users API Endpoints
-
-## Playlists API Endpoints
-
-## Restaurants API Endpoints
+![alt text](image.png)
+![alt text](image-1.png)
 
 ## Contributing
 
@@ -159,3 +132,4 @@ Contributions to improve the application are welcome. Please feel free to submit
 ## Licensing
 
 Available under the [MIT License](https://opensource.org/license/mit).
+
