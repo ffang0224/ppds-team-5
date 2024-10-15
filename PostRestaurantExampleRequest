@@ -1,0 +1,51 @@
+{
+  "restaurantId": "testing",
+  "name": "The Big Apple Diner",
+  "location": {
+    "address": "123 Broadway",
+    "coordinates": ["40.7128° N", "74.006° W"],
+    "city": "New York",
+    "country": "USA",
+    "postalCode": "10007",
+    "state": "NY"
+  },
+  "contact": {
+    "email": "info@bigapplediner.com",
+    "phone": "+12125551234",
+    "website": "https://www.bigapplediner.com"
+  },
+  "cuisines": "American",
+  "dietaryOptions": {
+    "glutenFree": true,
+    "halal": false,
+    "kosher": false,
+    "vegan": false,
+    "vegetarian": true
+  },
+  "features": {
+    "delivery": true,
+    "dineIn": true,
+    "outdoorSeating": false,
+    "parking": true,
+    "takeout": true,
+    "wifi": true
+  },
+  "hours": {
+    "monday": {"open": "00:00", "close": "23:59"},
+    "tuesday": {"open": "00:00", "close": "23:59"},
+    "wednesday": {"open": "00:00", "close": "23:59"},
+    "thursday": {"open": "00:00", "close": "23:59"},
+    "friday": {"open": "00:00", "close": "23:59"},
+    "saturday": {"open": "00:00", "close": "23:59"},
+    "sunday": {"open": "00:00", "close": "23:59"}
+  },
+  "images": [
+    "https://example.com/bigapplediner1.jpg",
+    "https://example.com/bigapplediner2.jpg"
+  ],
+  "popularDishes": ["Pancakes", "Cheeseburger", "Apple Pie"],
+  "priceRange": "$$",
+  "reservationLink": "https://reservations.bigapplediner.com",
+  "specialties": ["All-Day Breakfast", "Mile-High Sandwiches"],
+  "tags": ["24/7", "classic", "family-friendly"]
+}

@@ -1,0 +1,51 @@
+{
+  "restaurantId": "TestRestaurant",
+  "name": "Dolar Shop",
+  "location": {
+    "address": "Test PUT",
+    "city": "New York",
+    "country": "USA",
+    "postalCode": "10003",
+    "state": "NY",
+    "coordinates": {
+      "latitude": -40.7128,
+      "longitude": 54.0060
+    }
+  },
+  "contact": {
+    "email": "info@dolarshop.com",
+    "phone": "Test PUT",
+    "website": "https://www.dolarshop.com"
+  },
+  "cuisines": "Asian",
+  "dietaryOptions": {
+    "glutenFree": true,
+    "halal": false,
+    "kosher": false,
+    "vegan": true,
+    "vegetarian": true
+  },
+  "features": {
+    "delivery": true,
+    "dineIn": true,
+    "outdoorSeating": false,
+    "parking": true,
+    "takeout": true,
+    "wifi": true
+  },
+  "hours": {
+    "monday": {"open": "13:00", "close": "20:00"},
+    "tuesday": {"open": "10:00", "close": "23:59"},
+    "wednesday": {"open": "10:00", "close": "23:59"},
+    "thursday": {"open": "10:00", "close": "23:59"},
+    "friday": {"open": "10:00", "close": "23:59"},
+    "saturday": {"open": "10:00", "close": "23:59"},
+    "sunday": {"open": "10:00", "close": "23:59"}
+  },
+  "images": [],
+  "popularDishes": ["Pancakes", "Cheeseburger", "Apple Pie"],
+  "priceRange": "$$$",
+  "reservationLink": "https://reservations.dolarshop.com",
+  "specialties": ["All-Day Breakfast", "Mile-High Sandwiches"],
+  "tags": ["classic", "family-friendly","kids playground"]
+}

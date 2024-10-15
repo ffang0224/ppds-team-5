@@ -1,8 +1,10 @@
-from fastapi import FastAPI, HTTPException
 import firebase_admin
+from fastapi import FastAPI, HTTPException
 from firebase_admin import credentials, firestore
 from pydantic import BaseModel
 from typing import List, Dict
+from google.cloud import firestore as gc_firestore
+from google.cloud.firestore import GeoPoint
 
 # Initialize Firebase app
 cred = credentials.Certificate('../python_script/firebase_credentials.json')  # Adjust this path if necessary
@@ -172,13 +174,23 @@ async def update_review(review_id: str, review: Review):
         raise HTTPException(status_code=500, detail=f"Error updating review: {e}")
     
 
-# Aru's Part lines 137 - 177
-# Restaurants     
+
+# Aru's Part: Restaurants     
+class Location(BaseModel):
+    address: str
+    city: str
+    country: str
+    postalCode: str
+    state: str
+    coordinates: dict
+
+    def to_geopoint(self):
+        return GeoPoint(latitude=self.coordinates["latitude"], longitude=self.coordinates["longitude"])
+
 class Restaurant(BaseModel):
     restaurantId: str
     name: str
-    location: Dict[str, str]
-    #coordinates: List[str]
+    location: Location
     contact: Dict[str, str]
     cuisines: str
     dietaryOptions: Dict[str, bool]
@@ -196,33 +208,41 @@ class Restaurant(BaseModel):
 async def add_restaurant(restaurant: Restaurant):
     try:
         restaurant_data = restaurant.dict()
+
+        # Convert coordinates to GeoPoint
+        geopoint = restaurant.location.to_geopoint()
+        restaurant_data["location"]["coordinates"] = geopoint
         # Add the restaurant to Firestore
-        restaurant_ref = db.collection("restaurants").add(restaurant_data)
+        restaurant_ref = db.collection("restaurants").add(restaurant_data, restaurant_data["restaurantId"])
         return {"message": "restaurant added successfully", "restaurant_id": restaurant_ref[1].id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error adding restaurant: {e}")
 
-
-# Update a restaurant
-@app.put("/restaurants/{restaurant_id}")
-async def update_restaurant(restaurant_id: str, restaurant: Restaurant):
+# Update a restaurant  
+@app.put("/restaurants/{restaurantId}")
+async def update_restaurant(restaurantId: str, restaurant: Restaurant):
     try:
+        # Convert the Pydantic model to a dictionary
+        restaurant_data = restaurant.dict()
+
+        # Convert coordinates to GeoPoint
+        geopoint = restaurant.location.to_geopoint()
+        restaurant_data["location"]["coordinates"] = geopoint
+
         # Get the reference to the restaurant document
-        restaurant_ref = db.collection("restaurants").document(restaurant_id)
-        restaurant_doc = restaurant_ref.get()
+        restaurant_ref = db.collection("restaurants").document(restaurantId)
+        restaurant_snapshot = restaurant_ref.get()
 
         # Check if the restaurant exists
-        if not restaurant_doc.exists:
-            raise HTTPException(status_code=404, detail=f"restaurant with ID '{restaurant_id}' not found")
+        if not restaurant_snapshot.exists:
+            return {"error": "Restaurant with this ID does not exist"}
 
-        # Update the restaurant in Firestore
-        restaurant_data = restaurant.dict()
+        # Update the restaurant data in Firestore
         restaurant_ref.update(restaurant_data)
-        
-        return {"message": "restaurant updated successfully", "restaurant_id": restaurant_id}
+
+        return {"message": "Restaurant updated successfully", "restaurant_id": restaurantId}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error updating restaurant: {e}")
-    
+        return {"error": str(e)}
 
 
 # ref = db.collection("users").document(user_id)
