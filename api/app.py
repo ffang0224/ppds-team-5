@@ -172,6 +172,58 @@ async def update_review(review_id: str, review: Review):
         raise HTTPException(status_code=500, detail=f"Error updating review: {e}")
     
 
+# Aru's Part lines 137 - 177
+# Restaurants     
+class Restaurant(BaseModel):
+    restaurantId: str
+    name: str
+    location: Dict[str, str]
+    #coordinates: List[str]
+    contact: Dict[str, str]
+    cuisines: str
+    dietaryOptions: Dict[str, bool]
+    features: Dict[str, bool]
+    hours: Dict[str, Dict[str, str]]
+    images: List[str]
+    popularDishes: List[str]
+    priceRange: str
+    reservationLink: str
+    specialties: List[str]
+    tags: List[str]
+
+# Creating a new restaurant
+@app.post("/restaurants")
+async def add_restaurant(restaurant: Restaurant):
+    try:
+        restaurant_data = restaurant.dict()
+        # Add the restaurant to Firestore
+        restaurant_ref = db.collection("restaurants").add(restaurant_data)
+        return {"message": "restaurant added successfully", "restaurant_id": restaurant_ref[1].id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error adding restaurant: {e}")
+
+
+# Update a restaurant
+@app.put("/restaurants/{restaurant_id}")
+async def update_restaurant(restaurant_id: str, restaurant: Restaurant):
+    try:
+        # Get the reference to the restaurant document
+        restaurant_ref = db.collection("restaurants").document(restaurant_id)
+        restaurant_doc = restaurant_ref.get()
+
+        # Check if the restaurant exists
+        if not restaurant_doc.exists:
+            raise HTTPException(status_code=404, detail=f"restaurant with ID '{restaurant_id}' not found")
+
+        # Update the restaurant in Firestore
+        restaurant_data = restaurant.dict()
+        restaurant_ref.update(restaurant_data)
+        
+        return {"message": "restaurant updated successfully", "restaurant_id": restaurant_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating restaurant: {e}")
+    
+
 
 # ref = db.collection("users").document(user_id)
 # ref.update(newdata.dict())
