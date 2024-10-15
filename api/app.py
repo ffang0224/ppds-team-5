@@ -90,10 +90,6 @@ async def create_user(user: User):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating user: {e}")
 
-
-
-
-
 #Elyazia's Part lines 99-  136  
 class Playlist(BaseModel): 
     author: str
@@ -183,6 +179,23 @@ async def update_review(review_id: str, review: Review):
 
 # DELETE
 # ref = db.collection("users").document(user_id).delete()
+
+@app.delete("/{collectionId}/{itemID}")
+async def delete_item(collectionId: str, itemID: str):
+    try:
+        # Get the reference to the document
+        doc_ref = db.collection(collectionId).document(itemID)
+        doc = doc_ref.get()
+
+        # Check if the document exists
+        if not doc.exists:
+            raise HTTPException(status_code=404, detail=f"Document with ID '{itemID}' not found in collection '{collectionId}'")
+
+        # Delete the document
+        doc_ref.delete()
+        return {"message": f"Document with ID '{itemID}' deleted successfully from collection '{collectionId}'"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting document: {e}")
 
 
 
