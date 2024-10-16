@@ -1,0 +1,325 @@
+{
+	"info": {
+		"_postman_id": "7215b061-b1f5-4ce8-8bb4-5024fa09408d",
+		"name": "Foodify API Endpoints testing",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "38955443"
+	},
+	"item": [
+		{
+			"name": "Root",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get All Items",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/{{collectionName}}",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"{{collectionName}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Single Item",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/{{collectionName}}/{{id}}",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"{{collectionName}}",
+						"{{id}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Create User",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"email\": \"user@example.com\",\n    \"firstName\": \"John\",\n    \"lastName\": \"Doe\",\n    \"username\": \"johndoe\",\n    \"points\": {\n        \"generalPoints\": 100,\n        \"postPoints\": 50,\n        \"reviewPoints\": 30\n    },\n    \"playlists\": [\"playlist1\", \"playlist2\"]\n}"
+				},
+				"url": {
+					"raw": "http://localhost:8000/users",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"users"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Add Playlist",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"author\": \"John Doe\",\n    \"description\": \"My favorite restaurants\",\n    \"name\": \"Favorites\",\n    \"restaurants\": [\"restaurant1\", \"restaurant2\"],\n    \"username\": \"johndoe\"\n}"
+				},
+				"url": {
+					"raw": "http://localhost:8000/users/{{username}}/playlists",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"users",
+						"{{username}}",
+						"playlists"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Update Playlist",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"author\": \"John Doe\",\n    \"description\": \"Updated favorite restaurants\",\n    \"name\": \"Updated Favorites\",\n    \"restaurants\": [\"restaurant1\", \"restaurant2\", \"restaurant3\"],\n    \"username\": \"johndoe\"\n}"
+				},
+				"url": {
+					"raw": "http://localhost:8000/users/{{username}}/playlists/{{playlist_id}}",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"users",
+						"{{username}}",
+						"playlists",
+						"{{playlist_id}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Add Review",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"commentAuthor\": \"Jane Smith\",\n    \"restaurantId\": \"restaurant123\",\n    \"review\": \"Great food and atmosphere!\",\n    \"stars\": 5\n}"
+				},
+				"url": {
+					"raw": "http://localhost:8000/reviews",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"reviews"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Update Review",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"commentAuthor\": \"Jane Smith\",\n    \"restaurantId\": \"restaurant123\",\n    \"review\": \"Updated: Great food but service was slow.\",\n    \"stars\": 4\n}"
+				},
+				"url": {
+					"raw": "http://localhost:8000/reviews/{{review_id}}",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"reviews",
+						"{{review_id}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Add Restaurant",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"restaurantId\": \"restaurant123\",\n    \"name\": \"Tasty Bites\",\n    \"location\": {\n        \"address\": \"123 Main St\",\n        \"city\": \"Foodville\",\n        \"country\": \"Gourmet Land\",\n        \"postalCode\": \"12345\",\n        \"state\": \"Delicious\",\n        \"coordinates\": {\n            \"latitude\": 40.7128,\n            \"longitude\": -74.0060\n        }\n    },\n    \"contact\": {\n        \"phone\": \"+1234567890\",\n        \"email\": \"info@tastybites.com\"\n    },\n    \"cuisines\": \"Italian, Mediterranean\",\n    \"dietaryOptions\": {\n        \"vegetarian\": true,\n        \"vegan\": false,\n        \"glutenFree\": true\n    },\n    \"features\": {\n        \"takeout\": true,\n        \"delivery\": false,\n        \"reservations\": true\n    },\n    \"hours\": {\n        \"Monday\": {\"open\": \"11:00\", \"close\": \"22:00\"},\n        \"Tuesday\": {\"open\": \"11:00\", \"close\": \"22:00\"},\n        \"Wednesday\": {\"open\": \"11:00\", \"close\": \"22:00\"},\n        \"Thursday\": {\"open\": \"11:00\", \"close\": \"22:00\"},\n        \"Friday\": {\"open\": \"11:00\", \"close\": \"23:00\"},\n        \"Saturday\": {\"open\": \"11:00\", \"close\": \"23:00\"},\n        \"Sunday\": {\"open\": \"12:00\", \"close\": \"21:00\"}\n    },\n    \"images\": [\"https://example.com/image1.jpg\", \"https://example.com/image2.jpg\"],\n    \"popularDishes\": [\"Margherita Pizza\", \"Pasta Carbonara\"],\n    \"priceRange\": \"$$\",\n    \"reservationLink\": \"https://tastybites.com/reservations\",\n    \"specialties\": [\"Wood-fired pizza\", \"Homemade pasta\"],\n    \"tags\": [\"Italian\", \"Pizza\", \"Pasta\", \"Family-friendly\"]\n}"
+				},
+				"url": {
+					"raw": "http://localhost:8000/restaurants",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"restaurants"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Update Restaurant",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"restaurantId\": \"restaurant123\",\n    \"name\": \"Tasty Bites Deluxe\",\n    \"location\": {\n        \"address\": \"123 Main St\",\n        \"city\": \"Foodville\",\n        \"country\": \"Gourmet Land\",\n        \"postalCode\": \"12345\",\n        \"state\": \"Delicious\",\n        \"coordinates\": {\n            \"latitude\": 40.7128,\n            \"longitude\": -74.0060\n        }\n    },\n    \"contact\": {\n        \"phone\": \"+1234567890\",\n        \"email\": \"info@tastybites.com\"\n    },\n    \"cuisines\": \"Italian, Mediterranean, French\",\n    \"dietaryOptions\": {\n        \"vegetarian\": true,\n        \"vegan\": true,\n        \"glutenFree\": true\n    },\n    \"features\": {\n        \"takeout\": true,\n        \"delivery\": true,\n        \"reservations\": true\n    },\n    \"hours\": {\n        \"Monday\": {\"open\": \"11:00\", \"close\": \"23:00\"},\n        \"Tuesday\": {\"open\": \"11:00\", \"close\": \"23:00\"},\n        \"Wednesday\": {\"open\": \"11:00\", \"close\": \"23:00\"},\n        \"Thursday\": {\"open\": \"11:00\", \"close\": \"23:00\"},\n        \"Friday\": {\"open\": \"11:00\", \"close\": \"00:00\"},\n        \"Saturday\": {\"open\": \"11:00\", \"close\": \"00:00\"},\n        \"Sunday\": {\"open\": \"12:00\", \"close\": \"22:00\"}\n    },\n    \"images\": [\"https://example.com/image1.jpg\", \"https://example.com/image2.jpg\", \"https://example.com/image3.jpg\"],\n    \"popularDishes\": [\"Margherita Pizza\", \"Pasta Carbonara\", \"Coq au Vin\"],\n    \"priceRange\": \"$$$\",\n    \"reservationLink\": \"https://tastybites.com/reservations\",\n    \"specialties\": [\"Wood-fired pizza\", \"Homemade pasta\", \"French cuisine\"],\n    \"tags\": [\"Italian\", \"French\", \"Pizza\", \"Pasta\", \"Fine Dining\"]\n}"
+				},
+				"url": {
+					"raw": "http://localhost:8000/restaurants/{{restaurantId}}",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"restaurants",
+						"{{restaurantId}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Delete Item",
+			"request": {
+				"method": "DELETE",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/{{collectionId}}/{{itemID}}",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"{{collectionId}}",
+						"{{itemID}}"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "collectionName",
+			"value": "users"
+		},
+		{
+			"key": "id",
+			"value": "johndoe"
+		},
+		{
+			"key": "username",
+			"value": "johndoe"
+		},
+		{
+			"key": "playlist_id",
+			"value": "playlist123"
+		},
+		{
+			"key": "review_id",
+			"value": "review123"
+		},
+		{
+			"key": "restaurantId",
+			"value": "restaurant123"
+		},
+		{
+			"key": "collectionId",
+			"value": "users"
+		},
+		{
+			"key": "itemID",
+			"value": "johndoe"
+		}
+	]
+}
