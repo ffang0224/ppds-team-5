@@ -3,7 +3,7 @@ import requests
 import os
 
 # Manually load environment variables from .env file
-def load_env_variables(file_path=".env"):
+def load_env_variables(file_path="../.env"):
     with open(file_path) as f:
         for line in f:
             if line.strip() and not line.startswith("#"):
@@ -85,6 +85,7 @@ def get_data_id(api_key, search_query):
     response = requests.get(url, params=params)
     if response.status_code == 200:
         data = response.json()
+        # ******************************** [0] here gets the first restaurant data that appears on the result list
         place_data = data.get("local_results", [{}])[0]
         data_id = place_data["data_id"]
         return data_id
