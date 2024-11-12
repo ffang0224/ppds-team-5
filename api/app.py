@@ -1,13 +1,15 @@
+from fastapi import FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.encoders import jsonable_encoder
+from pydantic import BaseModel, Field
+from typing import List, Dict, Optional, Union, Any, TypeVar
+from datetime import datetime
 import firebase_admin
-from fastapi import FastAPI, HTTPException
 from firebase_admin import credentials, firestore
-from pydantic import BaseModel
-from typing import List, Dict
 from google.cloud import firestore as gc_firestore
-from google.cloud.firestore import GeoPoint
 
 # Initialize Firebase app
-cred = credentials.Certificate('../python_script/firebase_credentials.json')  # Adjust this path if necessary
+cred = credentials.Certificate('../python_script/firebase_credentials.json')
 firebase_admin.initialize_app(cred)
 
 # Get Firestore client
@@ -15,259 +17,326 @@ db = firestore.client()
 
 app = FastAPI()
 
-# Pydantic model to validate incoming user data
-class User(BaseModel):
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+T = TypeVar('T')
+
+def convert_to_json_serializable(data: Any) -> Any:
+    """Convert Firestore data types to JSON serializable formats"""
+    if data is None:
+        return None
+    elif isinstance(data, datetime):
+        return data.isoformat()
+    elif isinstance(data, (firestore.DocumentReference, firestore.DocumentSnapshot)):
+        return str(data.path)
+    elif isinstance(data, gc_firestore.GeoPoint):
+        return {'latitude': data.latitude, 'longitude': data.longitude}
+    elif isinstance(data, dict):
+        return {k: convert_to_json_serializable(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [convert_to_json_serializable(i) for i in data]
+    elif hasattr(data, 'get'):  # Handle DocumentSnapshot
+        return convert_to_json_serializable(data.to_dict())
+    return data
+
+class Points(BaseModel):
+    generalPoints: int = 0
+    postPoints: int = 0
+    reviewPoints: int = 0
+
+class UserBase(BaseModel):
     email: str
     firstName: str
     lastName: str
     username: str
-    points: Dict[str, int]  # e.g., {"generalPoints": 100, "postPoints": 50, "reviewPoints": 30}
-    playlists: List[str]  # list of playlist IDs
+    uid: str
+    points: Points = Field(default_factory=Points)
+    playlists: List[str] = Field(default_factory=list)
+    emailVerified: bool = False
 
-# Helper function to convert Firestore-specific types to JSON-serializable types
-def convert_to_json_serializable(obj):
-    if isinstance(obj, firestore.DocumentReference):
-        return obj.path  # Convert Firestore reference to string
-    elif isinstance(obj, dict):
-        return {k: convert_to_json_serializable(v) for k, v in obj.items()}  # Recursively handle nested dictionaries
-    elif isinstance(obj, list):
-        return [convert_to_json_serializable(i) for i in obj]  # Recursively handle lists
-    return obj  # Return the object as-is if it doesn't need special conversion
+class UserCreate(UserBase):
+    pass
 
-# Function to add user to Firestore
-def add_user_to_firestore(user_data, user_collection_name, playlist_collection_name):
-    user_data.playlists = [db.collection(playlist_collection_name).document(playlist_id) for playlist_id in user_data.playlists]
-    doc_ref = db.collection(user_collection_name).document(user_data.username)
-    doc_ref.set(user_data)
-    print(f"User added to collection {user_collection_name} with username: {user_data.username}")
+class UserRead(UserBase):
+    createdAt: str
 
-# Root endpoint for testing if FastAPI is running
-@app.get("/")
-async def root():
-    return {"message": "FastAPI is running"}
-
-
-# Fetch a single user by their username (entity_id)
-@app.get("/{collectionName}/{id}")
-async def get_item(collectionName:str, id: str):
-    try:
-        # Retrieve the user document by username
-        user_doc = db.collection(collectionName).document(id).get()
-        
-        # Check if the document exists
-        if not user_doc.exists:
-            raise HTTPException(status_code=404, detail=f"User with username '{id}' not found")
-        
-        # Convert Firestore document to dictionary
-        user_data = user_doc.to_dict()
-        json_friendly_data = {k: convert_to_json_serializable(v) for k, v in user_data.items()}
-        
-        return json_friendly_data
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving user: {e}")
-
-
-# Fetch all users from Firestore
-@app.get("/{collectionName}")
-async def get_items(collectionName: str):
-    try:
-        docs = db.collection(collectionName).stream()
-        users = []
-        for doc in docs:
-            user_data = doc.to_dict()
-            json_friendly_data = {k: convert_to_json_serializable(v) for k, v in user_data.items()}
-            users.append(json_friendly_data)
-        if len(users) == 0:
-            raise HTTPException(status_code=404, detail=f"Collection with name '{collectionName}' not found.")
-        return users
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching users: {e}")
-    
-@app.post("/users")
-async def create_user(user: User):
-    try:
-        user_dict = user.dict()
-        db.collection("users").add(user.dict(), user_dict["username"])
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error creating user: {e}")
-
-#Elyazia's Part lines 99-  136  
-class Playlist(BaseModel): 
-    author: str
-    description: str
+class PlaylistBase(BaseModel):
     name: str
-    restaurants: List[str]
+    description: Optional[str] = ""
+    restaurants: List[str] = Field(default_factory=list)
+    color: str = "#f97316"
+    author: str
     username: str
 
-@app.post("/users/{username}/playlists")
-async def add_playlist(username: str, playlist: Playlist):
+class PlaylistCreate(PlaylistBase):
+    pass
+
+class PlaylistRead(PlaylistBase):
+    id: str
+    createdAt: str
+
+def validate_and_serialize(data):
     try:
-        user_ref = db.collection("users").document(username)
-        user_doc = user_ref.get()
-        if not user_doc.exists:
-            raise HTTPException(status_code=404, detail=f"User with username '{username}' does not exist")
-        playlist_data = playlist.dict()  
-        user_ref.collection("playlists").add(playlist_data)
-        return {"message": "Playlist added successfully"}
+        serialized = convert_to_json_serializable(data)
+        # Verify serialization
+        json.dumps(serialized)
+        return serialized
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error adding playlist: {e}")    
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Data serialization error: {str(e)}"
+        )
+
+# --- User Endpoints ---
+@app.post("/users", status_code=status.HTTP_201_CREATED)
+async def create_user(user: UserCreate):
+    try:
+        # Check UID uniqueness
+        uid_query = db.collection("users").where("uid", "==", user.uid).get()
+        if len(list(uid_query)) > 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User with this authentication already exists"
+            )
+
+        # Check username availability
+        user_doc = db.collection("users").document(user.username).get()
+        if user_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username is already taken"
+            )
+
+        # Prepare user data
+        user_data = {
+            **jsonable_encoder(user),
+            "createdAt": datetime.utcnow().isoformat(),
+            "points": {
+                "generalPoints": 0,
+                "postPoints": 0,
+                "reviewPoints": 0
+            },
+            "playlists": []
+        }
+
+        # Create user document
+        db.collection("users").document(user.username).set(user_data)
+        
+        return {
+            "message": "User created successfully",
+            "username": user.username
+        }
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Error creating user: {str(e)}")  # For debugging
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@app.get("/users/{username}", response_model=UserRead)
+async def get_user(username: str):
+    try:
+        user_doc = db.collection("users").document(username).get()
+        
+        if not user_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User '{username}' not found"
+            )
+
+        # Convert document data to dict and make it JSON-serializable
+        user_data = user_doc.to_dict()
+        serialized_data = convert_to_json_serializable(user_data)
+        
+        return serialized_data
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Error getting user: {str(e)}")  # For debugging
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@app.get("/users/auth/{uid}", response_model=UserRead)
+async def get_user_by_uid(uid: str):
+    try:
+        users = db.collection("users").where("uid", "==", uid).limit(1).get()
+        user_list = list(users)
+        
+        if not user_list:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User with UID '{uid}' not found"
+            )
+
+        # Convert document data to dict and make it JSON-serializable
+        user_data = user_list[0].to_dict()
+        serialized_data = convert_to_json_serializable(user_data)
+        
+        return serialized_data
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Error getting user by UID: {str(e)}")  # For debugging
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+# --- Playlist Endpoints ---
+@app.post("/users/{username}/playlists", status_code=status.HTTP_201_CREATED)
+async def create_playlist(username: str, playlist: PlaylistCreate):
+    try:
+        # Verify user exists
+        user_doc = db.collection("users").document(username).get()
+        if not user_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User '{username}' not found"
+            )
+
+        # Verify ownership
+        if playlist.username != username:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot create playlist for another user"
+            )
+
+        # Create playlist with auto ID
+        playlist_ref = db.collection("users").document(username).collection("playlists").document()
+        
+        playlist_data = {
+            **playlist.dict(),
+            "id": playlist_ref.id,
+            "createdAt": datetime.utcnow().isoformat()
+        }
+
+        # Save playlist
+        playlist_ref.set(playlist_data)
+
+        # Update user's playlists array
+        db.collection("users").document(username).update({
+            "playlists": firestore.ArrayUnion([playlist_ref.id])
+        })
+
+        return {
+            "message": "Playlist created successfully",
+            "id": playlist_ref.id
+        }
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@app.get("/users/{username}/playlists", response_model=List[PlaylistRead])
+async def get_user_playlists(username: str):
+    try:
+        user_doc = db.collection("users").document(username).get()
+        if not user_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User '{username}' not found"
+            )
+
+        playlists = db.collection("users").document(username).collection("playlists").get()
+        return [validate_and_serialize(doc.to_dict()) for doc in playlists]
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@app.get("/users/{username}/playlists/{playlist_id}", response_model=PlaylistRead)
+async def get_playlist(username: str, playlist_id: str):
+    try:
+        doc = db.collection("users").document(username).collection("playlists").document(playlist_id).get()
+        if not doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Playlist not found"
+            )
+        return validate_and_serialize(doc.to_dict())
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
 
 @app.put("/users/{username}/playlists/{playlist_id}")
-async def update_playlist(username: str, playlist_id: str, playlist: Playlist):
+async def update_playlist(username: str, playlist_id: str, playlist: PlaylistCreate):
     try:
-        user_ref = db.collection("users").document(username)
-        user_doc = user_ref.get()
-        if not user_doc.exists:
-            raise HTTPException(status_code=404, detail=f"User with username '{username}' does not exist")
+        playlist_ref = db.collection("users").document(username).collection("playlists").document(playlist_id)
+        if not playlist_ref.get().exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Playlist not found"
+            )
 
-        playlist_ref = user_ref.collection("playlists").document(playlist_id)
-        playlist_doc = playlist_ref.get()
-        if not playlist_doc.exists:
-            raise HTTPException(status_code=404, detail=f"Playlist with ID '{playlist_id}' does not exist")
-        playlist_data = playlist.dict()
-        playlist_ref.update(playlist_data)
+        # Update playlist
+        playlist_ref.update(playlist.dict())
         return {"message": "Playlist updated successfully"}
+    except HTTPException as he:
+        raise he
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error updating playlist: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
 
-
-# Minseok's Part lines 137 - 177
-# Review
-class Review(BaseModel):
-    commentAuthor: str
-    restaurantId: str
-    review: str
-    source: str = None
-    stars: int
-
-# Creating a new review
-@app.post("/reviews")
-async def add_review(review: Review):
+@app.delete("/users/{username}/playlists/{playlist_id}")
+async def delete_playlist(username: str, playlist_id: str):
     try:
-        review_data = review.dict()
-        # Add the review to Firestore
-        review_ref = db.collection("reviews").add(review_data)
-        return {"message": "Review added successfully", "review_id": review_ref[1].id}
+        # Get refs
+        user_ref = db.collection("users").document(username)
+        playlist_ref = user_ref.collection("playlists").document(playlist_id)
+
+        # Verify playlist exists
+        if not playlist_ref.get().exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Playlist not found"
+            )
+
+        # Delete playlist
+        playlist_ref.delete()
+
+        # Update user's playlists array
+        user_ref.update({
+            "playlists": firestore.ArrayRemove([playlist_id])
+        })
+
+        return {"message": "Playlist deleted successfully"}
+    except HTTPException as he:
+        raise he
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error adding review: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
 
+# Extra endpoints as needed...
 
-# Update a review
-@app.put("/reviews/{review_id}")
-async def update_review(review_id: str, review: Review):
-    try:
-        # Get the reference to the review document
-        review_ref = db.collection("reviews").document(review_id)
-        review_doc = review_ref.get()
-
-        # Check if the review exists
-        if not review_doc.exists:
-            raise HTTPException(status_code=404, detail=f"Review with ID '{review_id}' not found")
-
-        # Update the review in Firestore
-        review_data = review.dict()
-        review_ref.update(review_data)
-        
-        return {"message": "Review updated successfully", "review_id": review_id}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error updating review: {e}")
-    
-
-
-# Aru's Part: Restaurants     
-class Location(BaseModel):
-    address: str
-    city: str
-    country: str
-    postalCode: str
-    state: str
-    coordinates: dict
-
-    def to_geopoint(self):
-        return GeoPoint(latitude=self.coordinates["latitude"], longitude=self.coordinates["longitude"])
-
-class Restaurant(BaseModel):
-    restaurantId: str
-    name: str
-    location: Location
-    contact: Dict[str, str]
-    cuisines: str
-    dietaryOptions: Dict[str, bool]
-    features: Dict[str, bool]
-    hours: Dict[str, Dict[str, str]]
-    images: List[str]
-    popularDishes: List[str]
-    priceRange: str
-    reservationLink: str
-    specialties: List[str]
-    tags: List[str]
-
-# Creating a new restaurant
-@app.post("/restaurants")
-async def add_restaurant(restaurant: Restaurant):
-    try:
-        restaurant_data = restaurant.dict()
-
-        # Convert coordinates to GeoPoint
-        geopoint = restaurant.location.to_geopoint()
-        restaurant_data["location"]["coordinates"] = geopoint
-        # Add the restaurant to Firestore
-        restaurant_ref = db.collection("restaurants").add(restaurant_data, restaurant_data["restaurantId"])
-        return {"message": "restaurant added successfully", "restaurant_id": restaurant_ref[1].id}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error adding restaurant: {e}")
-
-# Update a restaurant  
-@app.put("/restaurants/{restaurantId}")
-async def update_restaurant(restaurantId: str, restaurant: Restaurant):
-    try:
-        # Convert the Pydantic model to a dictionary
-        restaurant_data = restaurant.dict()
-
-        # Convert coordinates to GeoPoint
-        geopoint = restaurant.location.to_geopoint()
-        restaurant_data["location"]["coordinates"] = geopoint
-
-        # Get the reference to the restaurant document
-        restaurant_ref = db.collection("restaurants").document(restaurantId)
-        restaurant_snapshot = restaurant_ref.get()
-
-        # Check if the restaurant exists
-        if not restaurant_snapshot.exists:
-            return {"error": "Restaurant with this ID does not exist"}
-
-        # Update the restaurant data in Firestore
-        restaurant_ref.update(restaurant_data)
-
-        return {"message": "Restaurant updated successfully", "restaurant_id": restaurantId}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-# ref = db.collection("users").document(user_id)
-# ref.update(newdata.dict())
-
-
-# DELETE
-# ref = db.collection("users").document(user_id).delete()
-
-@app.delete("/{collectionId}/{itemID}")
-async def delete_item(collectionId: str, itemID: str):
-    try:
-        # Get the reference to the document
-        doc_ref = db.collection(collectionId).document(itemID)
-        doc = doc_ref.get()
-
-        # Check if the document exists
-        if not doc.exists:
-            raise HTTPException(status_code=404, detail=f"Document with ID '{itemID}' not found in collection '{collectionId}'")
-
-        # Delete the document
-        doc_ref.delete()
-        return {"message": f"Document with ID '{itemID}' deleted successfully from collection '{collectionId}'"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error deleting document: {e}")
-
-
-
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
