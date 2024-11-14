@@ -1,13 +1,17 @@
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Union, Any, TypeVar
 from datetime import datetime
 import firebase_admin
+import json
 from firebase_admin import credentials, firestore
 from google.cloud import firestore as gc_firestore
 from google.cloud.firestore import GeoPoint
+import aiofiles
+import os
+from typing import Optional
 
 # Initialize Firebase app
 cred = credentials.Certificate('../python_script/firebase_credentials.json')
@@ -380,31 +384,18 @@ def validate_and_serialize(data: dict) -> dict:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Data validation error: {str(e)}"
         )
-@app.get("/restaurants", response_model=List[Restaurant])
-async def get_restaurants():
-    try:
-        restaurants = db.collection("restaurants").get()
-        restaurant_list = []
         
-        for doc in restaurants:
-            try:
+@app.post("/admin/refresh-restaurant-cache")
+async def refresh_restaurant_cache(background_tasks: BackgroundTasks):
+    async def update_cache():
+        try:
+            restaurants = db.collection("restaurants").get()
+            restaurant_list = []
+            
+            for doc in restaurants:
                 data = doc.to_dict()
-                
-                # Convert GeoPoint to lat/lng format
                 if 'location' in data and isinstance(data['location'], GeoPoint):
                     data['location'] = convert_geopoint(data['location'])
-                elif 'location' in data and isinstance(data['location'], dict):
-                    # If it's already a dict, ensure it has lat/lng keys
-                    data['location'] = {
-                        'lat': data['location'].get('latitude', 0.0),
-                        'lng': data['location'].get('longitude', 0.0)
-                    }
-
-                # Convert datetime fields to strings
-                if 'created_at' in data:
-                    data['created_at'] = convert_datetime(data['created_at'])
-                if 'updated_at' in data:
-                    data['updated_at'] = convert_datetime(data['updated_at'])
                 
                 restaurant_data = {
                     'place_id': data.get('place_id', ''),
@@ -415,24 +406,67 @@ async def get_restaurants():
                     'location': data['location'],
                     'price_level': data.get('price_level'),
                     'types': data.get('types', []),
-                    'created_at': data.get('created_at'),
-                    'updated_at': data.get('updated_at')
+                    'created_at': convert_datetime(data.get('created_at')),
+                    'updated_at': convert_datetime(data.get('updated_at'))
                 }
-                
                 restaurant_list.append(restaurant_data)
+            
+            async with aiofiles.open('restaurant_cache.json', 'w') as f:
+                await f.write(json.dumps(restaurant_list))
                 
-            except Exception as e:
-                print(f"Error processing restaurant: {str(e)}")
-                continue
-        
-        return restaurant_list
-    except Exception as e:
-        print(f"Error in get_restaurants: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        except Exception as e:
+            print(f"Error updating cache: {str(e)}")
 
+    background_tasks.add_task(update_cache)
+    return {"message": "Cache refresh started"}
+
+# Replace your existing get_restaurants endpoint
+@app.get("/restaurants", response_model=List[Restaurant])
+async def get_restaurants(
+    search: Optional[str] = None,
+    cuisine: Optional[str] = None,
+    price_level: Optional[int] = None
+):
+    try:
+        if not os.path.exists('restaurant_cache.json'):
+            return await get_restaurants_from_firestore()
+            
+        async with aiofiles.open('restaurant_cache.json', 'r') as f:
+            content = await f.read()
+            restaurants = json.loads(content)
+            
+        filtered_restaurants = restaurants
+        
+        if search:
+            search_lower = search.lower()
+            filtered_restaurants = [
+                r for r in filtered_restaurants
+                if search_lower in r['name'].lower() or
+                any(search_lower in t.lower() for t in r['types'])
+            ]
+            
+        if cuisine:
+            cuisine_lower = cuisine.lower()
+            filtered_restaurants = [
+                r for r in filtered_restaurants
+                if cuisine_lower in [t.lower() for t in r['types']]
+            ]
+            
+        if price_level is not None:
+            filtered_restaurants = [
+                r for r in filtered_restaurants
+                if r['price_level'] == price_level
+            ]
+            
+        return filtered_restaurants
+        
+    except Exception as e:
+        return await get_restaurants_from_firestore()
+    
+# Fallback function for when cache fails
+async def get_restaurants_from_firestore():
+    restaurants = db.collection("restaurants").get()
+    return [validate_and_serialize(doc.to_dict()) for doc in restaurants]
 @app.get("/restaurants/{place_id}", response_model=Restaurant)
 async def get_restaurant(place_id: str):
     try:
