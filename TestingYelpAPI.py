@@ -3,7 +3,7 @@ import argparse
 import pprint
 
 BASE_URL = "https://serpapi.com/search.json"
-API_KEY = "58dc2fa4896f10d7ad7154b7b22c876f89baad627dab1bf1f5e110583523c5e9"  
+API_KEY = "58dc2fa4896f10d7ad7154b7b22c876f89baad627dab1bf1f5e110583523c5e9"  #API key is replaced here just for testing
 ENGINE_SEARCH = "yelp"
 ENGINE_REVIEWS = "yelp_reviews"
 DEFAULT_LOCATION = "New York, NY"  
