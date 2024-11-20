@@ -371,6 +371,91 @@ async def delete_playlist(username: str, playlist_id: str):
             detail=str(e)
         )
 
+@app.get("/users/{username}/lists", response_model=List[PlaylistRead])
+async def get_user_lists(username: str):
+    try:
+        user_doc = db.collection("users").document(username).get()
+        if not user_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User '{username}' not found"
+            )
+
+        lists = db.collection("users").document(username).collection("lists").get()
+        return [validate_and_serialize(doc.to_dict()) for doc in lists]
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@app.get("/users/{username}/lists/{list_id}", response_model=PlaylistRead)
+async def get_playlist(username: str, list_id: str):
+    try:
+        doc = db.collection("users").document(username).collection("lists").document(list_id).get()
+        if not doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Playlist not found"
+            )
+        return validate_and_serialize(doc.to_dict())
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@app.put("/users/{username}/lists/{list_id}")
+async def update_playlist(username: str, list_id: str, playlist: PlaylistCreate):
+    try:
+        playlist_ref = db.collection("users").document(username).collection("lists").document(list_id)
+        if not playlist_ref.get().exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Playlist not found"
+            )
+
+        playlist_ref.update(playlist.dict())
+        return {"message": "Playlist updated successfully"}
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@app.delete("/users/{username}/lists/{list_id}")
+async def delete_playlist(username: str, list_id: str):
+    try:
+        user_ref = db.collection("users").document(username)
+        playlist_ref = user_ref.collection("lists").document(list_id)
+
+        if not playlist_ref.get().exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Playlist not found"
+            )
+
+        playlist_ref.delete()
+
+        user_ref.update({
+            "lists": firestore.ArrayRemove([list_id])
+        })
+
+        return {"message": "Playlist deleted successfully"}
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
 def validate_and_serialize(data: dict) -> dict:
     try:
         # Convert GeoPoint if present
