@@ -102,6 +102,13 @@ class UserBase(BaseModel):
     lists: List[str] = Field(default_factory=list)  # Added for restaurant lists
     emailVerified: bool = False
 
+# Create a Pydantic model for the User update request
+class UserUpdateRequest(BaseModel):
+    firstName: Optional[str] = None
+    lastName: Optional[str] = None
+    email: Optional[str] = None
+    username: Optional[str] = None
+
 class UserCreate(UserBase):
     pass
 
@@ -246,6 +253,38 @@ async def get_user(username: str):
             detail=str(e)
         )
 
+@app.post("/users/{user_id}")
+async def update_user(user_id: str, user_update: UserUpdateRequest):
+    try:
+        
+        # Get reference to user document
+        user_ref = db.collection("users").document(user_id)
+        
+        # Prepare update data (remove None values)
+        update_data = {k: v for k, v in user_update.dict().items() if v is not None}
+        
+        if not update_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No valid update data provided"
+            )
+        
+        # Add updated timestamp
+        update_data["updatedAt"] = firestore.SERVER_TIMESTAMP
+        
+        # Update the document
+        user_ref.update(update_data)
+        
+        # Get and return the updated document
+        updated_doc = user_ref.get()
+        return updated_doc.to_dict()
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
 @app.get("/users/auth/{uid}", response_model=UserRead)
 async def get_user_by_uid(uid: str):
     try:
@@ -272,6 +311,57 @@ async def get_user_by_uid(uid: str):
             detail=str(e)
         )
 
+@app.put("/users/auth/{uid}", response_model=UserRead)
+async def update_user_by_uid(uid: str, user_update: UserUpdateRequest):
+    try:
+        # Fetch the user data from Firestore
+        users = db.collection("users").where("uid", "==", uid).limit(1).get()
+        user_list = list(users)
+        
+        if not user_list:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User with UID '{uid}' not found"
+            )
+        
+        # Get the user document reference
+        user_ref = user_list[0].reference
+        
+        # Prepare update data (only include fields that are provided)
+        update_data = {}
+        if user_update.firstName is not None:
+            update_data["firstName"] = user_update.firstName
+        if user_update.lastName is not None:
+            update_data["lastName"] = user_update.lastName
+        if user_update.email is not None:
+            update_data["email"] = user_update.email
+        if user_update.username is not None:
+            update_data["username"] = user_update.username
+            
+        # If no fields to update, raise an error
+        if not update_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="At least one field must be provided to update"
+            )
+            
+        # Update the user document
+        user_ref.update(update_data)
+        
+        # Fetch and return the updated user data
+        updated_user = user_ref.get()
+        user_data = updated_user.to_dict()
+        return user_data
+        
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Error updating user by UID: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+    
 # --- Original Playlist Endpoints ---
 @app.post("/users/{username}/playlists", status_code=status.HTTP_201_CREATED)
 async def create_playlist(username: str, playlist: PlaylistCreate):
