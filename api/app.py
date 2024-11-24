@@ -34,22 +34,56 @@ app.add_middleware(
 T = TypeVar('T')
 
 def convert_to_json_serializable(data: Any) -> Any:
-    """Convert Firestore data types to JSON serializable formats"""
-    if data is None:
-        return None
-    elif isinstance(data, datetime):
-        return data.isoformat()
-    elif isinstance(data, (firestore.DocumentReference, firestore.DocumentSnapshot)):
-        return str(data.path)
-    elif isinstance(data, gc_firestore.GeoPoint):
-        return {'latitude': data.latitude, 'longitude': data.longitude}
-    elif isinstance(data, dict):
-        return {k: convert_to_json_serializable(v) for k, v in data.items()}
-    elif isinstance(data, list):
-        return [convert_to_json_serializable(i) for i in data]
-    elif hasattr(data, 'get'):  # Handle DocumentSnapshot
-        return convert_to_json_serializable(data.to_dict())
-    return data
+    """
+    Convert Firestore data types to JSON serializable formats.
+    Handles nested dictionaries, lists, GeoPoints, DocumentReferences, 
+    DocumentSnapshots, and datetime objects.
+    """
+    try:
+        if data is None:
+            return None
+            
+        # Handle datetime
+        if isinstance(data, datetime):
+            return data.isoformat()
+            
+        # Handle Firestore document references and snapshots
+        if isinstance(data, (firestore.DocumentReference, firestore.DocumentSnapshot)):
+            return str(data.path)
+            
+        # Handle GeoPoint
+        if isinstance(data, GeoPoint):
+            return {
+                'lat': data.latitude,
+                'lng': data.longitude
+            }
+            
+        # Handle dictionaries (including DocumentSnapshot conversion)
+        if isinstance(data, dict) or hasattr(data, 'to_dict'):
+            # Convert DocumentSnapshot to dict if needed
+            source_dict = data.to_dict() if hasattr(data, 'to_dict') else data
+            return {k: convert_to_json_serializable(v) for k, v in source_dict.items()}
+            
+        # Handle lists
+        if isinstance(data, list):
+            return [convert_to_json_serializable(i) for i in data]
+            
+        return data
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Data serialization error: {str(e)}"
+        )
+
+# Main validation and serialization function to use in endpoints
+def validate_and_serialize(data: Any) -> dict:
+    """
+    Main function to validate and serialize Firestore data.
+    Use this function in your endpoints to process Firestore data.
+    """
+    return convert_to_json_serializable(data)
+
 
 # Original Models
 class Points(BaseModel):
@@ -67,6 +101,13 @@ class UserBase(BaseModel):
     playlists: List[str] = Field(default_factory=list)
     lists: List[str] = Field(default_factory=list)  # Added for restaurant lists
     emailVerified: bool = False
+
+# Create a Pydantic model for the User update request
+class UserUpdateRequest(BaseModel):
+    firstName: Optional[str] = None
+    lastName: Optional[str] = None
+    email: Optional[str] = None
+    username: Optional[str] = None
 
 class UserCreate(UserBase):
     pass
@@ -106,6 +147,11 @@ class Restaurant(BaseModel):
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat() if v else None
+        }
+
 # Convert Firestore GeoPoint to dict
 def convert_geopoint(geopoint):
     if isinstance(geopoint, GeoPoint):
@@ -135,16 +181,6 @@ class RestaurantListCreate(RestaurantListBase):
 class RestaurantListRead(RestaurantListBase):
     id: str
     createdAt: str
-
-def validate_and_serialize(data):
-    try:
-        serialized = convert_to_json_serializable(data)
-        return serialized
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Data serialization error: {str(e)}"
-        )
 
 # --- Original User Endpoints ---
 @app.post("/users", status_code=status.HTTP_201_CREATED)
@@ -217,6 +253,38 @@ async def get_user(username: str):
             detail=str(e)
         )
 
+@app.post("/users/{user_id}")
+async def update_user(user_id: str, user_update: UserUpdateRequest):
+    try:
+        
+        # Get reference to user document
+        user_ref = db.collection("users").document(user_id)
+        
+        # Prepare update data (remove None values)
+        update_data = {k: v for k, v in user_update.dict().items() if v is not None}
+        
+        if not update_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No valid update data provided"
+            )
+        
+        # Add updated timestamp
+        update_data["updatedAt"] = firestore.SERVER_TIMESTAMP
+        
+        # Update the document
+        user_ref.update(update_data)
+        
+        # Get and return the updated document
+        updated_doc = user_ref.get()
+        return updated_doc.to_dict()
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
 @app.get("/users/auth/{uid}", response_model=UserRead)
 async def get_user_by_uid(uid: str):
     try:
@@ -243,6 +311,57 @@ async def get_user_by_uid(uid: str):
             detail=str(e)
         )
 
+@app.put("/users/auth/{uid}", response_model=UserRead)
+async def update_user_by_uid(uid: str, user_update: UserUpdateRequest):
+    try:
+        # Fetch the user data from Firestore
+        users = db.collection("users").where("uid", "==", uid).limit(1).get()
+        user_list = list(users)
+        
+        if not user_list:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User with UID '{uid}' not found"
+            )
+        
+        # Get the user document reference
+        user_ref = user_list[0].reference
+        
+        # Prepare update data (only include fields that are provided)
+        update_data = {}
+        if user_update.firstName is not None:
+            update_data["firstName"] = user_update.firstName
+        if user_update.lastName is not None:
+            update_data["lastName"] = user_update.lastName
+        if user_update.email is not None:
+            update_data["email"] = user_update.email
+        if user_update.username is not None:
+            update_data["username"] = user_update.username
+            
+        # If no fields to update, raise an error
+        if not update_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="At least one field must be provided to update"
+            )
+            
+        # Update the user document
+        user_ref.update(update_data)
+        
+        # Fetch and return the updated user data
+        updated_user = user_ref.get()
+        user_data = updated_user.to_dict()
+        return user_data
+        
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Error updating user by UID: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+    
 # --- Original Playlist Endpoints ---
 @app.post("/users/{username}/playlists", status_code=status.HTTP_201_CREATED)
 async def create_playlist(username: str, playlist: PlaylistCreate):
@@ -455,20 +574,6 @@ async def delete_playlist(username: str, list_id: str):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
-
-def validate_and_serialize(data: dict) -> dict:
-    try:
-        # Convert GeoPoint if present
-        if 'location' in data and isinstance(data['location'], GeoPoint):
-            data['location'] = convert_geopoint(data['location'])
-            
-        return data
-    except Exception as e:
-        print(f"Error in validate_and_serialize: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Data validation error: {str(e)}"
-        )
         
 @app.post("/admin/refresh-restaurant-cache")
 async def refresh_restaurant_cache(background_tasks: BackgroundTasks):
@@ -552,22 +657,67 @@ async def get_restaurants(
 async def get_restaurants_from_firestore():
     restaurants = db.collection("restaurants").get()
     return [validate_and_serialize(doc.to_dict()) for doc in restaurants]
+
+# @app.get("/restaurants/{restaurant_id}", response_model=Restaurant)
+# async def get_restaurant(restaurant_id: str):
+#     try:
+#         # Get restaurant document asynchronously
+#         doc_ref = db.collection("restaurants").document(restaurant_id)
+#         doc = await doc_ref.get()
+        
+#         if not doc.exists:
+#             raise HTTPException(
+#                 status_code=status.HTTP_404_NOT_FOUND,
+#                 detail=f"Restaurant with id {restaurant_id} not found"
+#             )
+        
+#         # Convert Firestore document to dict and add id
+#         restaurant_data = doc.to_dict()
+#         restaurant_data["id"] = doc.id
+        
+#         # Validate and return using Pydantic model
+#         return Restaurant(**restaurant_data)
+        
+#     except HTTPException as he:
+#         raise he
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"Failed to retrieve restaurant: {str(e)}"
+#         )
+
 @app.get("/restaurants/{place_id}", response_model=Restaurant)
 async def get_restaurant(place_id: str):
     try:
-        doc = db.collection("restaurants").document(place_id).get()
-        if not doc.exists:
+        # Query restaurant collection by place_id
+        restaurants_ref = db.collection("restaurants")
+        query = restaurants_ref.where("place_id", "==", place_id).limit(1)
+        docs = query.stream()
+        
+        restaurant_doc = next(docs, None)
+        
+        if not restaurant_doc:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Restaurant not found"
+                detail=f"Restaurant with place_id {place_id} not found"
             )
-        return validate_and_serialize(doc.to_dict())
+        
+        # Convert Firestore document to dict and add id
+        restaurant_data = restaurant_doc.to_dict()
+        restaurant_data["id"] = restaurant_doc.id
+        
+        # Validate and format the data
+        formatted_data = validate_and_serialize(restaurant_data)
+        
+        # Validate and return using Pydantic model
+        return Restaurant(**formatted_data)
+    
     except HTTPException as he:
         raise he
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail=f"Failed to retrieve restaurant: {str(e)}"
         )
 
 # --- New Restaurant List Endpoints ---
@@ -765,29 +915,69 @@ async def get_nearby_restaurants(lat: float, lng: float, radius_km: float = 2.0)
             detail=str(e)
         )
 
+# @app.get("/users/{username}/lists/{list_id}/restaurants", response_model=List[Restaurant])
+# async def get_restaurants_in_list(username: str, list_id: str):
+#     try:
+#         # Get the list
+#         list_doc = db.collection("users").document(username).collection("lists").document(list_id).get()
+        
+#         if not list_doc.exists:
+#             raise HTTPException(
+#                 status_code=status.HTTP_404_NOT_FOUND,
+#                 detail="Restaurant list not found"
+#             )
+
+#         list_data = list_doc.to_dict()
+#         restaurant_ids = list_data.get('restaurants', [])
+
+#         # Get all restaurants in the list
+#         restaurants = []
+#         for place_id in restaurant_ids:
+#             restaurant_doc = db.collection("restaurants").document(place_id).get()
+#             if restaurant_doc.exists:
+#                 restaurants.append(validate_and_serialize(restaurant_doc.to_dict()))
+
+#         return restaurants
+#     except HTTPException as he:
+#         raise he
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=str(e)
+#         )
+
 @app.get("/users/{username}/lists/{list_id}/restaurants", response_model=List[Restaurant])
 async def get_restaurants_in_list(username: str, list_id: str):
     try:
         # Get the list
-        list_doc = db.collection("users").document(username).collection("lists").document(list_id).get()
+        list_doc = db.collection("users").document(username)\
+                    .collection("lists").document(list_id).get()
         
         if not list_doc.exists:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Restaurant list not found"
             )
-
+        
         list_data = list_doc.to_dict()
-        restaurant_ids = list_data.get('restaurants', [])
-
-        # Get all restaurants in the list
+        place_ids = list_data.get('restaurants', [])
+        
+        # Get all restaurants in the list using place_id
         restaurants = []
-        for place_id in restaurant_ids:
-            restaurant_doc = db.collection("restaurants").document(place_id).get()
-            if restaurant_doc.exists:
-                restaurants.append(validate_and_serialize(restaurant_doc.to_dict()))
-
+        restaurants_ref = db.collection("restaurants")
+        
+        for place_id in place_ids:
+            query = restaurants_ref.where("place_id", "==", place_id).limit(1)
+            docs = query.stream()
+            restaurant_doc = next(docs, None)
+            
+            if restaurant_doc:
+                restaurant_data = restaurant_doc.to_dict()
+                restaurant_data["id"] = restaurant_doc.id
+                restaurants.append(Restaurant(**restaurant_data))
+        
         return restaurants
+        
     except HTTPException as he:
         raise he
     except Exception as e:
