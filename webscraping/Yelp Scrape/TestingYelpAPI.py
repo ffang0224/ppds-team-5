@@ -1,80 +1,108 @@
-import requests
-import time
+import asyncio
+import aiohttp
+import csv
+import os
+from typing import List, Dict
 
-# Replace 'your_api_key_here' with your actual Yelp API key
-api_key = '01WSezkCpEgpErRuKeMXYJRvqrRvcYabzUn9lI-T65FCWnxIAmkicY8os8mx8LRDKn7f2Exg4usa5Mdm1FudBVWuTF5jVGkaYQ2UcuHfOIxb7dwYf3seYLyuwZJCZ3Yx'
+api_keys = ["NZQG3fuTbnmManKnYgq2LOXkYedSHOBzwCfODVCS0XXiUxXQQ1rCI0VPRc5o9mXwvhQrDPsJnu2AyVhG52C-Za2g44OUiFWYwDsB2UntwhM4rhoQdgDIWzoHhVVDZ3Yx", "qDhtGGUl6f8kENMzN0qCIaoDuNjO6xhagyBMFnom2Wp2RL-Ps9Yn5M5Tw3U52q2tQyf8gHKJbV61fRtvUui0DBcFkE7RVujUgnxdXurSdQB5XypW44lr03qKSqBCZ3Yx"]
+api_key_index = 0
 
-# Location and term for search
-location = '10003'  # Postal code 10003 for NYC
-term = 'restaurant'  # Searching specifically for restaurants
-max_results = 100  # Get up to 100 results (2 calls with 50 restaurants per call)
-max_reviews_per_restaurant = 1  # Limit to 1 review per restaurant to reduce calls
+async def fetch_reviews(session, headers, business_ids: List[str], reviews_per_restaurant: int):
+    reviews = []
+    for business_id in business_ids:
+        review_url = f"https://api.yelp.com/v3/businesses/{business_id}/reviews"
+        async with session.get(review_url, headers=headers) as response:
+            if response.status != 200:
+                reviews.append([])  
+            else:
+                data = await response.json()
+                reviews.append(data.get('reviews', [])[:reviews_per_restaurant])  
+    return reviews
 
-# Yelp API headers
-headers = {
-    "Authorization": f"Bearer {api_key}",
-    "Accept": "application/json"
-}
+async def fetch_restaurants_with_reviews(
+    location: str,
+    reviews_per_restaurant: int = 3,
+    total_restaurants: int = 458
+) -> List[Dict]:
+    global api_key_index
+    headers = {
+        "Authorization": f"Bearer {api_keys[api_key_index]}",
+        "Accept": "application/json"
+    }
+    search_url = "https://api.yelp.com/v3/businesses/search"
+    restaurants = []
+    limit_per_request = 50  
 
-# Step 1: Search for restaurants in postal code 10003 (only 50 results max per call)
-def search_restaurants(location, term, limit=50):
-    search_url = f"https://api.yelp.com/v3/businesses/search?location={location}&term={term}&limit={limit}"
-    response = requests.get(search_url, headers=headers)
-    
-    if response.status_code == 200:
-        return response.json().get('businesses', [])
-    else:
-        print(f"Error fetching businesses. Status code: {response.status_code}")
-        return []
-
-# Step 2: Get a limited number of reviews (1 review per restaurant)
-def get_reviews(business_id):
-    reviews_url = f"https://api.yelp.com/v3/businesses/{business_id}/reviews?limit={max_reviews_per_restaurant}"
-    response = requests.get(reviews_url, headers=headers)
-    
-    if response.status_code == 200:
-        return response.json().get('reviews', [])
-    else:
-        print(f"Error fetching reviews for {business_id}. Status code: {response.status_code}")
-        return []
-
-# Step 3: Fetch all businesses and reviews (up to 100 restaurants with reviews)
-def fetch_business_reviews(location, term, max_results=100):
-    all_reviews = []
-    
-    # Get 50 restaurants from the first API call
-    businesses = search_restaurants(location, term, limit=50)
-    
-    # If more restaurants exist, make the second call
-    if len(businesses) < max_results:
-        businesses += search_restaurants(location, term, limit=50)
-    
-    # Limit the number of restaurants to `max_results` (maximum 100)
-    businesses = businesses[:max_results]
-    
-    for business in businesses:
-        business_id = business['id']
-        print(f"\nFetching reviews for {business['name']} (ID: {business_id})...")
+    async with aiohttp.ClientSession() as session:
+        for offset in range(0, total_restaurants, limit_per_request):
+            params = {
+                "location": location,
+                "term": "restaurant",
+                "limit": limit_per_request,
+                "offset": offset
+            }
+            
+            if offset % 100 == 0 and offset != 0:
+                api_key_index = (api_key_index + 1) % len(api_keys)
+                headers["Authorization"] = f"Bearer {api_keys[api_key_index]}"
+                
+            async with session.get(search_url, headers=headers, params=params) as response:
+                if response.status != 200:
+                    continue
+                data = await response.json()
+                fetched_restaurants = data.get('businesses', [])
+                if not fetched_restaurants:
+                    break  
+                restaurants.extend(fetched_restaurants)
         
-        # Fetch 1 review for each business
-        reviews = get_reviews(business_id)
+        business_ids = [restaurant['id'] for restaurant in restaurants]
+        
+        reviews = await fetch_reviews(session, headers, business_ids, reviews_per_restaurant)
+        
+        restaurants_with_reviews = []
+        for restaurant, review_set in zip(restaurants, reviews):
+            restaurant_data = {
+                'business_name': restaurant['name'],
+                'reviews': review_set  
+            }
+            restaurants_with_reviews.append(restaurant_data)
+        
+        print(f"Fetched {len(restaurants_with_reviews)} restaurants with reviews.")  # Debugging line
+        return restaurants_with_reviews
 
-        if reviews:
-            all_reviews.append({
-                'business_name': business['name'],
-                'reviews': reviews
-            })
+def save_to_csv(data, filename="restaurants_reviews.csv"):
+    if not data:
+        print("No data to save.")  # Debugging line
+        return
+    
+    current_directory = os.path.dirname(os.path.realpath(__file__))
+    file_path = os.path.join(current_directory, filename)
+    
+    with open(file_path, mode='w', newline='', encoding='utf-8') as file:
+        writer = csv.writer(file)
+        writer.writerow(["Business Name", "Review Text"])
 
-        # Sleep to avoid hitting the rate limit
-        time.sleep(1)  # Sleep for 1 second between requests to avoid rate limiting
+        for restaurant in data:
+            if not restaurant['reviews']:  # Debugging line to check if there are reviews
+                print(f"No reviews for {restaurant['business_name']}.")
+            for review in restaurant['reviews']:
+                writer.writerow([restaurant['business_name'], review.get('text', 'No text')])
 
-    return all_reviews
+    print(f"Data saved to '{file_path}'")
 
-# Run the function to get businesses and their reviews
-reviews = fetch_business_reviews(location, term, max_results)
+def main():
+    location = "10003"  
 
-# Print the fetched reviews
-for review_data in reviews:
-    print(f"\nReviews for {review_data['business_name']}:")
-    for review in review_data['reviews']:
-        print(f"- {review['text']}")
+    results = asyncio.run(
+        fetch_restaurants_with_reviews(
+            location=location,
+        )
+    )
+
+    if not results:
+        print("No results fetched.")  # Debugging line
+
+    save_to_csv(results)
+
+if __name__ == "__main__":
+    main()
