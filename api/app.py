@@ -724,67 +724,52 @@ async def get_restaurants_from_firestore():
     restaurants = db.collection("restaurants").get()
     return [validate_and_serialize(doc.to_dict()) for doc in restaurants]
 
-# @app.get("/restaurants/{restaurant_id}", response_model=Restaurant)
-# async def get_restaurant(restaurant_id: str):
-#     try:
-#         # Get restaurant document asynchronously
-#         doc_ref = db.collection("restaurants").document(restaurant_id)
-#         doc = await doc_ref.get()
-        
-#         if not doc.exists:
-#             raise HTTPException(
-#                 status_code=status.HTTP_404_NOT_FOUND,
-#                 detail=f"Restaurant with id {restaurant_id} not found"
-#             )
-        
-#         # Convert Firestore document to dict and add id
-#         restaurant_data = doc.to_dict()
-#         restaurant_data["id"] = doc.id
-        
-#         # Validate and return using Pydantic model
-#         return Restaurant(**restaurant_data)
-        
-#     except HTTPException as he:
-#         raise he
-#     except Exception as e:
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail=f"Failed to retrieve restaurant: {str(e)}"
-#         )
 
-@app.get("/restaurants/{place_id}", response_model=Restaurant)
+
+
+@app.get("/restaurants/{place_id}")
 async def get_restaurant(place_id: str):
+    """
+    Retrieve a single restaurant's full details from the cache by `place_id`.
+    """
     try:
-        # Query restaurant collection by place_id
-        restaurants_ref = db.collection("restaurants")
-        query = restaurants_ref.where("place_id", "==", place_id).limit(1)
-        docs = query.stream()
-        
-        restaurant_doc = next(docs, None)
-        
-        if not restaurant_doc:
+        # Ensure the cache file exists
+        if not os.path.exists('restaurant_cache.json'):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Cache file not found. Please refresh the cache."
+            )
+
+        # Load the cache
+        async with aiofiles.open('restaurant_cache.json', 'r') as f:
+            content = await f.read()
+            restaurants = json.loads(content)
+
+        # Find the restaurant by `place_id`
+        restaurant = next(
+            (r for r in restaurants if r["additional_info"]["gmaps"]["place_id"] == place_id), None
+        )
+
+        if not restaurant:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Restaurant with place_id {place_id} not found"
             )
-        
-        # Convert Firestore document to dict and add id
-        restaurant_data = restaurant_doc.to_dict()
-        restaurant_data["id"] = restaurant_doc.id
-        
-        # Validate and format the data
-        formatted_data = validate_and_serialize(restaurant_data)
-        
-        # Validate and return using Pydantic model
-        return Restaurant(**formatted_data)
-    
-    except HTTPException as he:
-        raise he
+
+        # Return the restaurant data exactly as it exists in the database
+        return restaurant
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve restaurant: {str(e)}"
         )
+
+
+
+
+
+
 
 # --- New Restaurant List Endpoints ---
 @app.post("/users/{username}/lists", status_code=status.HTTP_201_CREATED)
