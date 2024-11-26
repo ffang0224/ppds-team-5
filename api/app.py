@@ -787,6 +787,54 @@ async def search_restaurants(
         )
 
 
+
+
+
+
+@app.get("/restaurants/popular", response_model=List[dict])
+async def get_popular_restaurants(limit: int = 10):
+    """
+    Retrieve the most popular restaurants sorted by:
+    - Highest rating (`rating`).
+    - Most reviews (`user_ratings_total`) as a tiebreaker.
+    """
+    try:
+        # Ensure the cache file exists
+        if not os.path.exists('restaurant_cache.json'):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Cache file not found. Please refresh the cache."
+            )
+
+        # Load the cache
+        async with aiofiles.open('restaurant_cache.json', 'r') as f:
+            content = await f.read()
+            restaurants = json.loads(content)
+
+        # Sort restaurants by rating (descending) and then by total ratings (descending)
+        sorted_restaurants = sorted(
+            restaurants,
+            key=lambda r: (
+                r["ratings"]["gmaps"]["rating"],  # Primary: gmaps rating
+                r["ratings"]["gmaps"]["total_ratings"],  # Secondary: gmaps total ratings
+            ),
+            reverse=True
+        )
+
+        # Limit the results
+        return sorted_restaurants[:limit]
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve popular restaurants: {str(e)}"
+        )
+
+
+
+
+
+
 @app.get("/restaurants/{place_id}")
 async def get_restaurant(place_id: str):
     """
@@ -824,7 +872,6 @@ async def get_restaurant(place_id: str):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve restaurant: {str(e)}"
         )
-
 
 
 
@@ -945,24 +992,6 @@ async def delete_restaurant_list(username: str, list_id: str):
             detail=str(e)
         )
 
-
-
-
-@app.get("/restaurants/popular")
-async def get_popular_restaurants(limit: int = 10):
-    try:
-        restaurants = (db.collection("restaurants")
-                      .order_by("rating", direction=firestore.Query.DESCENDING)
-                      .order_by("user_ratings_total", direction=firestore.Query.DESCENDING)
-                      .limit(limit)
-                      .get())
-        
-        return [validate_and_serialize(doc.to_dict()) for doc in restaurants]
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
 
 @app.get("/restaurants/nearby")
 async def get_nearby_restaurants(lat: float, lng: float, radius_km: float = 2.0):
