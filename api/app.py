@@ -12,6 +12,7 @@ from google.cloud.firestore import GeoPoint
 import aiofiles
 import os
 from typing import Optional
+import requests
 
 # Initialize Firebase app
 cred = credentials.Certificate('../python_script/firebase_credentials.json')
@@ -1024,6 +1025,63 @@ async def get_restaurants_in_list(username: str, list_id: str):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
+def load_env_file():
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    if os.path.exists(env_path):
+        with open(env_path) as f:
+            for line in f:
+                if line.strip() and not line.startswith("#"):
+                    key, value = line.strip().split("=", 1)
+                    os.environ[key] = value
+
+# Call the function before accessing environment variables
+load_env_file()
+
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
+
+
+@app.get("/restaurant-photo/{place_id}")
+async def get_restaurant_photo(place_id: str):
+    try:
+        # Get place details from Google Maps API
+        details_url = f"https://maps.googleapis.com/maps/api/place/details/json"
+        details_params = {
+            "place_id": place_id,
+            "fields": "photo",
+            "key": GOOGLE_MAPS_API_KEY,
+        }
+        details_response = requests.get(details_url, params=details_params)
+        details_data = details_response.json()
+
+        # Check for errors
+        if details_response.status_code != 200 or "error_message" in details_data:
+            raise HTTPException(
+                status_code=details_response.status_code,
+                detail=details_data.get("error_message", "Unknown error occurred."),
+            )
+
+        # Get the photo reference
+        photo_references = details_data.get("result", {}).get("photos", [])
+        if not photo_references:
+            return {"photo_url": None}
+
+        # Fetch the photo URL using the first reference
+        photo_reference = photo_references[0]["photo_reference"]
+        photo_url = (
+            f"https://maps.googleapis.com/maps/api/place/photo"
+            f"?maxwidth=400&photoreference={photo_reference}&key={GOOGLE_MAPS_API_KEY}"
+        )
+
+        return {"photo_url": photo_url}
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch photo: {str(e)}",
+        )
+
+
 
 if __name__ == "__main__":
     import uvicorn
