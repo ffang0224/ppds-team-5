@@ -88,7 +88,7 @@ def validate_and_serialize(data: Any) -> dict:
     return convert_to_json_serializable(data)
 
 
-# Original Models
+# Models!
 class Points(BaseModel):
     generalPoints: int = 0
     postPoints: int = 0
@@ -105,7 +105,6 @@ class UserBase(BaseModel):
     lists: List[str] = Field(default_factory=list)  # Added for restaurant lists
     emailVerified: bool = False
 
-# Create a Pydantic model for the User update request
 class UserUpdateRequest(BaseModel):
     firstName: Optional[str] = None
     lastName: Optional[str] = None
@@ -137,6 +136,7 @@ class PlaylistRead(PlaylistBase):
 class Location(BaseModel):
     lat: float
     lng: float
+    address: str
 
 class Restaurant(BaseModel):
     place_id: str
@@ -154,6 +154,29 @@ class Restaurant(BaseModel):
         json_encoders = {
             datetime: lambda v: v.isoformat() if v else None
         }
+        
+    
+#review models
+class ReviewAuthor(BaseModel):
+    name: Optional[str] = None
+    profile_photo_url: Optional[str] = None
+
+class Review(BaseModel):
+    text: Optional[str] = None
+    time: Optional[str] = None
+    rating: Optional[int] = None
+    author: Optional[Union[str, ReviewAuthor]] = None
+    platform: Optional[str] = None
+    language: Optional[str] = None
+
+class RestaurantReviews(BaseModel):
+    google_place_id: str
+    gmaps_name: str
+    yelp_name: Optional[str] = None
+    yelp_business_id: Optional[str] = None
+    fetch_time: str
+    reviews: List[Review]
+
 
 # Convert Firestore GeoPoint to dict
 def convert_geopoint(geopoint):
@@ -364,6 +387,44 @@ async def update_user_by_uid(uid: str, user_update: UserUpdateRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+        
+# Get all users endpoint
+@app.get("/users")
+async def get_all_users():
+    try:
+        users_ref = db.collection("users").stream()
+        users = []
+        for doc in users_ref:
+            user_data = doc.to_dict()
+            user_data["username"] = doc.id
+            users.append(validate_and_serialize(user_data))
+        return users
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+    
+# Get user's lists with restaurant details
+@app.get("/users/{username}/lists/details")
+async def get_user_lists_with_details(username: str):
+    try:
+        lists = await get_user_restaurant_lists(username)
+        detailed_lists = []
+
+        for list_item in lists:
+            restaurants = []
+            for place_id in list_item.get("restaurants", []):
+                try:
+                    restaurant = await get_restaurant(place_id)
+                    restaurants.append(restaurant)
+                except:
+                    continue
+
+            list_item["detailed_restaurants"] = restaurants
+            detailed_lists.append(list_item)
+
+        return detailed_lists
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     
 # --- Original Playlist Endpoints ---
 @app.post("/users/{username}/playlists", status_code=status.HTTP_201_CREATED)
@@ -1157,8 +1218,138 @@ async def get_restaurant_photo(place_id: str):
             status_code=500,
             detail=f"Failed to fetch photo: {str(e)}",
         )
+@app.get("/restaurant-photos/{place_id}")
+async def get_restaurant_photos(place_id: str, limit: int = 5):
+    try:
+        # Get place details from Google Maps API
+        details_url = f"https://maps.googleapis.com/maps/api/place/details/json"
+        details_params = {
+            "place_id": place_id,
+            "fields": "photo",
+            "key": GOOGLE_MAPS_API_KEY,
+        }
+        details_response = requests.get(details_url, params=details_params)
+        details_data = details_response.json()
+
+        # Check for errors
+        if details_response.status_code != 200 or "error_message" in details_data:
+            raise HTTPException(
+                status_code=details_response.status_code,
+                detail=details_data.get("error_message", "Unknown error occurred."),
+            )
+
+        # Get all photo references
+        photo_references = details_data.get("result", {}).get("photos", [])
+        if not photo_references:
+            return {"photo_urls": []}
+
+        # Fetch multiple photo URLs up to the limit
+        photo_urls = []
+        for photo_ref in photo_references[:limit]:
+            photo_reference = photo_ref["photo_reference"]
+            photo_url = (
+                f"https://maps.googleapis.com/maps/api/place/photo"
+                f"?maxwidth=400&photoreference={photo_reference}&key={GOOGLE_MAPS_API_KEY}"
+            )
+            photo_urls.append(photo_url)
+
+        return {"photo_urls": photo_urls}
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch photos: {str(e)}",
+        )
 
 
+#review endpoints:
+@app.post("/admin/refresh-reviews-cache")
+async def refresh_reviews_cache(background_tasks: BackgroundTasks):
+    async def update_reviews_cache():
+        try:
+            reviews_ref = db.collection("reviews").stream()
+            reviews_data = {}
+
+            for doc in reviews_ref:
+                # Get the document data
+                data = doc.to_dict()
+                
+                # Extract metadata
+                metadata = data["metadata"]
+                
+                # Combine Google and Yelp reviews
+                reviews_list = []
+                
+                # Add Google reviews
+                google_reviews = data.get("google_reviews", [])
+                reviews_list.extend(google_reviews)
+                
+                # Add Yelp reviews
+                yelp_reviews = data.get("yelp_reviews", [])
+                reviews_list.extend(yelp_reviews)
+                
+                # Create the structured data
+                restaurant_reviews = {
+                    "google_place_id": metadata.get("google_place_id"),
+                    "gmaps_name": metadata.get("gmaps_name"),
+                    "yelp_name": metadata.get("yelp_name"),
+                    "yelp_business_id": metadata.get("yelp_business_id"),
+                    "fetch_time": metadata.get("fetch_time"),
+                    "reviews": reviews_list
+                }
+                
+                # Store using google_place_id as key
+                if metadata.get("google_place_id"):
+                    reviews_data[metadata["google_place_id"]] = restaurant_reviews
+
+            # Write to cache file
+            async with aiofiles.open('reviews_cache.json', 'w') as f:
+                await f.write(json.dumps(reviews_data))
+
+            print("Reviews cache updated successfully.")
+
+        except Exception as e:
+            print(f"Error updating reviews cache: {str(e)}")
+
+    # Run the update process in the background
+    background_tasks.add_task(update_reviews_cache)
+    return {"message": "Reviews cache refresh started"}
+
+@app.get("/restaurants/{place_id}/reviews", response_model=RestaurantReviews)
+async def get_restaurant_reviews(place_id: str):
+    """
+    Retrieve all reviews for a specific restaurant by its Google Place ID.
+    The response includes both Google and Yelp reviews combined into a single list.
+    """
+    try:
+        # Ensure the cache file exists
+        if not os.path.exists('reviews_cache.json'):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Reviews cache file not found. Please refresh the cache."
+            )
+
+        # Load the cache
+        async with aiofiles.open('reviews_cache.json', 'r') as f:
+            content = await f.read()
+            reviews_data = json.loads(content)
+
+        # Get reviews for the specific restaurant
+        restaurant_reviews = reviews_data.get(place_id)
+        
+        if not restaurant_reviews:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Reviews not found for restaurant with place_id {place_id}"
+            )
+
+        return restaurant_reviews
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve reviews: {str(e)}"
+        )
 
 if __name__ == "__main__":
     import uvicorn
