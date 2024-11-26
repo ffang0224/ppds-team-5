@@ -13,6 +13,8 @@ import aiofiles
 import os
 from typing import Optional
 import requests
+from math import radians, sin, cos, sqrt, atan2
+
 
 # Initialize Firebase app
 cred = credentials.Certificate('../python_script/firebase_credentials.json')
@@ -835,6 +837,69 @@ async def get_popular_restaurants(limit: int = 10):
 
 
 
+
+@app.get("/restaurants/nearby")
+async def get_nearby_restaurants(lat: float, lng: float, radius_km: float = 2.0):
+    """
+    Retrieve restaurants within a given radius (in kilometers) of a specific location.
+    """
+    try:
+        # Ensure the cache file exists
+        if not os.path.exists('restaurant_cache.json'):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Cache file not found. Please refresh the cache."
+            )
+
+        # Load cached data
+        async with aiofiles.open('restaurant_cache.json', 'r') as f:
+            content = await f.read()
+            restaurants = json.loads(content)
+
+        def haversine_distance(lat1, lng1, lat2, lng2):
+            """
+            Calculate the great-circle distance between two points on Earth.
+            """
+            # Convert latitude and longitude from degrees to radians
+            lat1, lng1, lat2, lng2 = map(radians, [lat1, lng1, lat2, lng2])
+            
+            # Haversine formula
+            dlat = lat2 - lat1
+            dlng = lng2 - lng1
+            a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlng / 2)**2
+            c = 2 * atan2(sqrt(a), sqrt(1 - a))
+            earth_radius_km = 6371  # Radius of Earth in kilometers
+            return earth_radius_km * c
+
+        # Filter restaurants within the radius
+        nearby = []
+        for restaurant in restaurants:
+            location = restaurant.get("location", {}).get("gmaps", {})
+            r_lat = location.get("lat")
+            r_lng = location.get("lng")
+
+            # Skip if location data is missing
+            if r_lat is None or r_lng is None:
+                continue
+
+            # Calculate the distance using Haversine formula
+            distance = haversine_distance(lat, lng, r_lat, r_lng)
+            if distance <= radius_km:
+                nearby.append(restaurant)
+
+        return nearby
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve nearby restaurants: {str(e)}"
+        )
+
+
+
+
+
+
 @app.get("/restaurants/{place_id}")
 async def get_restaurant(place_id: str):
     """
@@ -993,66 +1058,10 @@ async def delete_restaurant_list(username: str, list_id: str):
         )
 
 
-@app.get("/restaurants/nearby")
-async def get_nearby_restaurants(lat: float, lng: float, radius_km: float = 2.0):
-    try:
-        # Note: This is a simple implementation. For production, you'd want to use
-        # geohashing or a proper geo-querying solution
-        
-        # Convert km to lat/lng degrees (approximate)
-        lat_degree = radius_km / 111.0  # 111km per degree of latitude
-        lng_degree = radius_km / (111.0 * cos(radians(lat)))  # Adjust for longitude
 
-        restaurants = db.collection("restaurants").get()
-        
-        nearby = []
-        for doc in restaurants:
-            restaurant = doc.to_dict()
-            r_lat = restaurant['location']['lat']
-            r_lng = restaurant['location']['lng']
-            
-            # Simple distance check
-            if (abs(r_lat - lat) <= lat_degree and 
-                abs(r_lng - lng) <= lng_degree):
-                nearby.append(validate_and_serialize(restaurant))
 
-        return nearby
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
 
-# @app.get("/users/{username}/lists/{list_id}/restaurants", response_model=List[Restaurant])
-# async def get_restaurants_in_list(username: str, list_id: str):
-#     try:
-#         # Get the list
-#         list_doc = db.collection("users").document(username).collection("lists").document(list_id).get()
-        
-#         if not list_doc.exists:
-#             raise HTTPException(
-#                 status_code=status.HTTP_404_NOT_FOUND,
-#                 detail="Restaurant list not found"
-#             )
 
-#         list_data = list_doc.to_dict()
-#         restaurant_ids = list_data.get('restaurants', [])
-
-#         # Get all restaurants in the list
-#         restaurants = []
-#         for place_id in restaurant_ids:
-#             restaurant_doc = db.collection("restaurants").document(place_id).get()
-#             if restaurant_doc.exists:
-#                 restaurants.append(validate_and_serialize(restaurant_doc.to_dict()))
-
-#         return restaurants
-#     except HTTPException as he:
-#         raise he
-#     except Exception as e:
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail=str(e)
-#         )
 
 @app.get("/users/{username}/lists/{list_id}/restaurants", response_model=List[Restaurant])
 async def get_restaurants_in_list(username: str, list_id: str):
