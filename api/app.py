@@ -617,82 +617,108 @@ async def delete_playlist(username: str, list_id: str):
         
 @app.post("/admin/refresh-restaurant-cache")
 async def refresh_restaurant_cache(background_tasks: BackgroundTasks):
+
     async def update_cache():
         try:
-            restaurants = db.collection("restaurants").get()
+            restaurants_ref = db.collection("restaurants").stream()
             restaurant_list = []
-            
-            for doc in restaurants:
+
+            for doc in restaurants_ref:
                 data = doc.to_dict()
-                if 'location' in data and isinstance(data['location'], GeoPoint):
-                    data['location'] = convert_geopoint(data['location'])
-                
+
+                # Collecting data for one restaurant
                 restaurant_data = {
-                    'place_id': data.get('place_id', ''),
-                    'name': data.get('name', ''),
-                    'rating': float(data.get('rating', 0.0)),
-                    'user_ratings_total': int(data.get('user_ratings_total', 0)),
-                    'address': data.get('address', ''),
-                    'location': data['location'],
-                    'price_level': data.get('price_level'),
-                    'types': data.get('types', []),
-                    'created_at': convert_datetime(data.get('created_at')),
-                    'updated_at': convert_datetime(data.get('updated_at'))
+                    "name": data.get("name", {}),
+                    "ratings": data.get("ratings", {}),
+                    "location": data.get("location", {}),
+                    "price_level": data.get("price_level", {}),
+                    "types": data.get("types", {}),
+                    "additional_info": data.get("additional_info", {}),
+                    "match_confidence": data.get("match_confidence", None),
                 }
+
+                # Append the restaurant data
                 restaurant_list.append(restaurant_data)
-            
+
+            # Write the data to the cache file
             async with aiofiles.open('restaurant_cache.json', 'w') as f:
                 await f.write(json.dumps(restaurant_list))
-                
+
+            print("Cache updated successfully.")
+
         except Exception as e:
             print(f"Error updating cache: {str(e)}")
 
+    # Run the update process in the background
     background_tasks.add_task(update_cache)
     return {"message": "Cache refresh started"}
 
-# Replace your existing get_restaurants endpoint
-@app.get("/restaurants", response_model=List[Restaurant])
+
+
+@app.get("/restaurants", response_model=List[dict])
 async def get_restaurants(
     search: Optional[str] = None,
     cuisine: Optional[str] = None,
-    price_level: Optional[int] = None
+    price_level: Optional[int] = None,
 ):
+    """
+    Retrieve all restaurants from the cache and apply optional filters:
+    - `search`: Search by name (gmaps or yelp).
+    - `cuisine`: Filter by types (gmaps or yelp).
+    - `price_level`: Filter by price levels (composite).
+    """
     try:
+        # Ensure the cache file exists
         if not os.path.exists('restaurant_cache.json'):
-            return await get_restaurants_from_firestore()
-            
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Cache file not found. Please refresh the cache."
+            )
+
+        # Load the cache
         async with aiofiles.open('restaurant_cache.json', 'r') as f:
             content = await f.read()
-            restaurants = json.loads(content)
-            
-        filtered_restaurants = restaurants
-        
+            restaurants = json.loads(content)  # List of restaurants
+
+        # Filter by search
         if search:
             search_lower = search.lower()
-            filtered_restaurants = [
-                r for r in filtered_restaurants
-                if search_lower in r['name'].lower() or
-                any(search_lower in t.lower() for t in r['types'])
+            restaurants = [
+                r for r in restaurants
+                if search_lower in r['name']['gmaps'].lower() or
+                   search_lower in r['name']['yelp'].lower()
             ]
-            
+
+        # Filter by cuisine
         if cuisine:
             cuisine_lower = cuisine.lower()
-            filtered_restaurants = [
-                r for r in filtered_restaurants
-                if cuisine_lower in [t.lower() for t in r['types']]
+            restaurants = [
+                r for r in restaurants
+                if cuisine_lower in r['types']['gmaps'] or cuisine_lower in r['types']['yelp']
             ]
-            
+
+        # Filter by price level
         if price_level is not None:
-            filtered_restaurants = [
-                r for r in filtered_restaurants
-                if r['price_level'] == price_level
+            restaurants = [
+                r for r in restaurants
+                if r['price_level']['composite']['min'] is not None and
+                   r['price_level']['composite']['min'] <= price_level <=
+                   r['price_level']['composite']['max']
             ]
-            
-        return filtered_restaurants
-        
+
+        # Return the filtered restaurants
+        return restaurants
+
     except Exception as e:
-        return await get_restaurants_from_firestore()
-    
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving restaurants: {str(e)}"
+        )
+
+
+
+
+
 # Fallback function for when cache fails
 async def get_restaurants_from_firestore():
     restaurants = db.collection("restaurants").get()
