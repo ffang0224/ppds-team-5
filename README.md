@@ -60,6 +60,12 @@ source .venv/bin/activate
 5. Initialize a Firebase Firestore Instance and download credentials. \
    Add credentials to the root folder with the name _"firebase_credentials.json"_. Credentials can be found under **Project Settings -> Service Accounts**
 
+6. Create .env file in "api" directory
+   Create the file and write the google maps api key. For example:
+   ```
+   GOOGLE_MAPS_API_KEY=YOUR_API_KEY_HERE
+   ```
+
 ## Script Usage
 
 To run the script:
