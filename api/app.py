@@ -725,6 +725,66 @@ async def get_restaurants_from_firestore():
     return [validate_and_serialize(doc.to_dict()) for doc in restaurants]
 
 
+@app.get("/restaurants/search", response_model=List[dict])
+async def search_restaurants(
+    query: Optional[str] = None,
+    cuisine: Optional[str] = None,
+    price_level: Optional[int] = None
+):
+    """
+    Search for restaurants in the cache based on:
+    - `query`: Keywords in name (gmaps or yelp).
+    - `cuisine`: Matches types in gmaps or yelp.
+    - `price_level`: Matches normalized price levels.
+    """
+    try:
+        # Ensure the cache file exists
+        if not os.path.exists('restaurant_cache.json'):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Cache file not found. Please refresh the cache."
+            )
+
+        # Load the cache
+        async with aiofiles.open('restaurant_cache.json', 'r') as f:
+            content = await f.read()
+            restaurants = json.loads(content)
+
+        # Start with all restaurants
+        filtered_restaurants = restaurants
+
+        # Filter by query in names
+        if query:
+            query_lower = query.lower()
+            filtered_restaurants = [
+                r for r in filtered_restaurants
+                if query_lower in r["name"]["gmaps"].lower() or query_lower in r["name"]["yelp"].lower()
+            ]
+
+        # Filter by cuisine
+        if cuisine:
+            cuisine_lower = cuisine.lower()
+            filtered_restaurants = [
+                r for r in filtered_restaurants
+                if cuisine_lower in r["types"]["gmaps"] or cuisine_lower in r["types"]["yelp"]
+            ]
+
+        # Filter by price level
+        if price_level is not None:
+            filtered_restaurants = [
+                r for r in filtered_restaurants
+                if r["price_level"]["composite"]["min"] is not None and
+                   r["price_level"]["composite"]["min"] <= price_level <=
+                   r["price_level"]["composite"]["max"]
+            ]
+
+        return filtered_restaurants
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to search restaurants: {str(e)}"
+        )
 
 
 @app.get("/restaurants/{place_id}")
@@ -885,40 +945,8 @@ async def delete_restaurant_list(username: str, list_id: str):
             detail=str(e)
         )
 
-# Added some utility endpoints for restaurants
-@app.get("/restaurants/search")
-async def search_restaurants(query: str, cuisine: Optional[str] = None, price_level: Optional[int] = None):
-    try:
-        restaurants_ref = db.collection("restaurants")
-        
-        # Start with base query
-        query_ref = restaurants_ref
 
-        # Apply filters if provided
-        if cuisine:
-            query_ref = query_ref.where("types", "array_contains", cuisine.lower())
-        
-        if price_level is not None:
-            query_ref = query_ref.where("price_level", "==", price_level)
 
-        # Get all matching documents
-        restaurants = query_ref.get()
-        
-        # Filter by name search (done in memory since Firestore doesn't support case-insensitive search)
-        results = []
-        query_lower = query.lower()
-        for doc in restaurants:
-            restaurant = doc.to_dict()
-            if (query_lower in restaurant['name'].lower() or
-                any(query_lower in type_.lower() for type_ in restaurant['types'])):
-                results.append(validate_and_serialize(restaurant))
-
-        return results
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
 
 @app.get("/restaurants/popular")
 async def get_popular_restaurants(limit: int = 10):
