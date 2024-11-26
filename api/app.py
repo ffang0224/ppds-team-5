@@ -548,6 +548,45 @@ async def update_playlist(username: str, list_id: str, playlist: PlaylistCreate)
             detail=str(e)
         )
 
+
+@app.post("/users/{username}/lists/{list_id}/restaurants/add")
+async def add_place_to_restaurants(username: str, list_id: str, body: dict):
+    try:
+        place_id = body.get("place_id")
+        if not place_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Place ID is required."
+            )
+
+        list_ref = db.collection("users").document(username).collection("lists").document(list_id)
+        list_doc = list_ref.get()
+
+        if not list_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"List '{list_id}' not found for user '{username}'."
+            )
+
+        # Update the array
+        list_ref.update({
+            "restaurants": firestore.ArrayUnion([place_id])
+        })
+
+        return {
+            "message": f"Place ID '{place_id}' successfully added to the list '{list_id}'."
+        }
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred: {str(e)}"
+        )
+
+
+
 @app.delete("/users/{username}/lists/{list_id}")
 async def delete_playlist(username: str, list_id: str):
     try:
