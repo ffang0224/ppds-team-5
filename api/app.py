@@ -113,7 +113,8 @@ class UserUpdateRequest(BaseModel):
 
 class UserCreate(UserBase):
     pass
-
+class PointsUpdateRequest(BaseModel):
+    points: int = Field(..., description="Number of points to add")
 class UserRead(UserBase):
     createdAt: str
 
@@ -277,6 +278,57 @@ async def get_user(username: str):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
+        )
+
+
+@app.post("/users/{username}/updatePoints", response_model=dict)
+async def update_user_points(
+    username: str,
+    points_update: PointsUpdateRequest,
+):
+    try:
+        # Get user reference
+        users_ref = db.collection('users')
+        user_query = users_ref.where('username', '==', username).limit(1)
+        user_docs = user_query.stream()
+        
+        # Get the user document
+        user_doc = next(user_docs, None)
+        if not user_doc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User {username} not found"
+            )
+            
+        # Get current points
+        current_points = user_doc.get('points', {})
+        if not isinstance(current_points, dict):
+            current_points = {
+                'generalPoints': 0,
+                'postPoints': 0,
+                'reviewPoints': 0
+            }
+            
+        # Update general points only
+        new_general_points = current_points.get('generalPoints', 0) + points_update.points
+        
+        # Update only the generalPoints
+        user_doc.reference.update({
+            'points.generalPoints': new_general_points
+        })
+        
+        return {
+            "success": True,
+            "message": f"Successfully updated points for user {username}",
+            "newPoints": {
+                'generalPoints': new_general_points
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update points: {str(e)}"
         )
 
 @app.post("/users/{user_id}")
