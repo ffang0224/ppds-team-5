@@ -16,8 +16,20 @@ import requests
 from math import radians, sin, cos, sqrt, atan2
 
 
+def load_env_file():
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    if os.path.exists(env_path):
+        with open(env_path) as f:
+            for line in f:
+                if line.strip() and not line.startswith("#"):
+                    key, value = line.strip().split("=", 1)
+                    os.environ[key] = value
+
+# Call the function before accessing environment variables
+load_env_file()
+
 # Initialize Firebase app
-cred = credentials.Certificate('../python_script/firebase_credentials.json')
+cred = credentials.Certificate(json.loads(os.environ['FIREBASE_CREDENTIALS']))
 firebase_admin.initialize_app(cred)
 
 # Get Firestore client
@@ -1216,17 +1228,7 @@ async def get_restaurants_in_list(username: str, list_id: str):
             detail=str(e)
         )
 
-def load_env_file():
-    env_path = os.path.join(os.path.dirname(__file__), ".env")
-    if os.path.exists(env_path):
-        with open(env_path) as f:
-            for line in f:
-                if line.strip() and not line.startswith("#"):
-                    key, value = line.strip().split("=", 1)
-                    os.environ[key] = value
 
-# Call the function before accessing environment variables
-load_env_file()
 
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
 
