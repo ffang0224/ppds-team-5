@@ -197,10 +197,6 @@ class RestaurantListBase(BaseModel):
     author: str
     username: str
 
-class RestaurantListCreate(RestaurantListBase):
-    # id: str  # Explicitly require an ID
-    createdAt: Optional[str] = Field(default_factory=lambda: datetime.utcnow().isoformat())
-
 class RestaurantListRead(RestaurantListBase):
     id: str
     createdAt: Optional[str] = None
@@ -513,7 +509,7 @@ async def get_playlist(username: str, list_id: str):
         )
 
 @app.put("/users/{username}/lists/{list_id}")
-async def update_playlist(username: str, list_id: str, playlist: RestaurantListCreate):
+async def update_playlist(username: str, list_id: str, playlist: RestaurantListBase):
     try:
         playlist_ref = db.collection("users").document(username).collection("lists").document(list_id)
         if not playlist_ref.get().exists:
@@ -897,7 +893,7 @@ async def get_restaurant(place_id: str):
 
 #allLists endpoints
 @app.post("/allLists", status_code=status.HTTP_201_CREATED)
-async def create_global_restaurant_list(restaurant_list: RestaurantListCreate):
+async def create_global_restaurant_list(restaurant_list: RestaurantListBase):
     try:
         # Verify the user exists before creating the list
         user_doc = db.collection("users").document(restaurant_list.username).get()
@@ -907,15 +903,16 @@ async def create_global_restaurant_list(restaurant_list: RestaurantListCreate):
                 detail=f"User '{restaurant_list.username}' not found"
             )
 
-        # Use the provided ID from the client if it exists
-        list_ref = db.collection("allLists").document(restaurant_list.id)
+        # Generate new document reference with auto-generated ID
+        list_ref = db.collection("allLists").document()
 
         # Prepare list data with additional global list fields
         list_data = {
             **restaurant_list.dict(),
+            "id": list_ref.id,  # Use Firestore's auto-generated ID
             "createdAt": datetime.utcnow().isoformat(),
-            "num_likes": 0,  # Initialize likes to 0
-            "favorited_by": [],  # Initialize empty list of users who favorited
+            "num_likes": 0,
+            "favorited_by": [],
         }
 
         # Set the document in allLists collection
@@ -923,7 +920,7 @@ async def create_global_restaurant_list(restaurant_list: RestaurantListCreate):
 
         return {
             "message": "Global restaurant list created successfully",
-            "id": restaurant_list.id
+            "id": list_ref.id
         }
 
     except HTTPException as he:
@@ -932,7 +929,7 @@ async def create_global_restaurant_list(restaurant_list: RestaurantListCreate):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
-        )  
+        ) 
 
 @app.get("/allLists", response_model=List[RestaurantListRead])
 async def get_all_restaurant_lists():
@@ -1207,7 +1204,7 @@ async def get_popular_restaurant_lists():
 
 #users/{username}/lists endpoints
 @app.post("/users/{username}/lists", status_code=status.HTTP_201_CREATED)
-async def create_restaurant_list(username: str, restaurant_list: RestaurantListCreate):
+async def create_restaurant_list(username: str, restaurant_list: RestaurantListBase):  # Change from RestaurantListCreate to RestaurantListBase
     try:
         # Verify the user exists
         user_doc = db.collection("users").document(username).get()
@@ -1217,12 +1214,13 @@ async def create_restaurant_list(username: str, restaurant_list: RestaurantListC
                 detail=f"User '{username}' not found"
             )
 
-        # Use the same ID provided by the client
-        list_ref = db.collection("users").document(username).collection("lists").document(restaurant_list.id)
-
-        # Prepare list data (specific to user's list)
+        # Generate new document reference with auto-generated ID
+        list_ref = db.collection("users").document(username).collection("lists").document()
+        
+        # Prepare list data with the auto-generated ID
         list_data = {
             **restaurant_list.dict(),
+            "id": list_ref.id,  # Use Firestore's auto-generated ID
             "createdAt": datetime.utcnow().isoformat(),
         }
 
@@ -1231,7 +1229,7 @@ async def create_restaurant_list(username: str, restaurant_list: RestaurantListC
 
         return {
             "message": "User restaurant list created successfully",
-            "id": restaurant_list.id
+            "id": list_ref.id
         }
 
     except HTTPException as he:
@@ -1263,7 +1261,7 @@ async def get_user_restaurant_lists(username: str):
         )
 
 @app.put("/users/{username}/lists/{list_id}")
-async def update_restaurant_list(username: str, list_id: str, restaurant_list: RestaurantListCreate):
+async def update_restaurant_list(username: str, list_id: str, restaurant_list: RestaurantListBase):
     try:
         list_ref = db.collection("users").document(username).collection("lists").document(list_id)
         if not list_ref.get().exists:
