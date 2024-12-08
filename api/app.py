@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, status, BackgroundTasks
+from fastapi import FastAPI, HTTPException, status, BackgroundTasks, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
@@ -13,7 +13,7 @@ import aiofiles
 import os
 from typing import Optional
 import requests
-from math import radians, sin, cos, sqrt, atan2
+from math import radians, sin, cos, sqrt, atan2, ceil
 
 
 def load_env_file():
@@ -99,6 +99,20 @@ def validate_and_serialize(data: Any) -> dict:
     """
     return convert_to_json_serializable(data)
 
+# Convert Firestore GeoPoint to dict
+def convert_geopoint(geopoint):
+    if isinstance(geopoint, GeoPoint):
+        return {
+            "lat": geopoint.latitude,
+            "lng": geopoint.longitude
+        }
+    return geopoint
+
+# Convert datetime to ISO string
+def convert_datetime(dt):
+    if hasattr(dt, 'timestamp'):
+        return dt.isoformat()
+    return dt
 
 # Models!
 class Points(BaseModel):
@@ -130,21 +144,6 @@ class PointsUpdateRequest(BaseModel):
 class UserRead(UserBase):
     createdAt: str
 
-class PlaylistBase(BaseModel):
-    name: str
-    description: Optional[str] = ""
-    restaurants: List[str] = Field(default_factory=list)
-    color: str = "#f97316"
-    author: str
-    username: str
-
-class PlaylistCreate(PlaylistBase):
-    pass
-
-class PlaylistRead(PlaylistBase):
-    id: str
-    createdAt: str
-
 # Updated Restaurant Models
 class Location(BaseModel):
     lat: float
@@ -168,7 +167,6 @@ class Restaurant(BaseModel):
             datetime: lambda v: v.isoformat() if v else None
         }
         
-    
 #review models
 class ReviewAuthor(BaseModel):
     name: Optional[str] = None
@@ -190,22 +188,7 @@ class RestaurantReviews(BaseModel):
     fetch_time: str
     reviews: List[Review]
 
-
-# Convert Firestore GeoPoint to dict
-def convert_geopoint(geopoint):
-    if isinstance(geopoint, GeoPoint):
-        return {
-            "lat": geopoint.latitude,
-            "lng": geopoint.longitude
-        }
-    return geopoint
-
-# Convert datetime to ISO string
-def convert_datetime(dt):
-    if hasattr(dt, 'timestamp'):
-        return dt.isoformat()
-    return dt
-
+#List model
 class RestaurantListBase(BaseModel):
     name: str
     description: Optional[str] = ""
@@ -215,11 +198,14 @@ class RestaurantListBase(BaseModel):
     username: str
 
 class RestaurantListCreate(RestaurantListBase):
-    pass
+    id: str  # Explicitly require an ID
+    createdAt: Optional[str] = Field(default_factory=lambda: datetime.utcnow().isoformat())
 
 class RestaurantListRead(RestaurantListBase):
     id: str
-    createdAt: str
+    createdAt: Optional[str] = None
+    num_likes: int = 0
+    favorited_by: List[str] = []
 
 # --- Original User Endpoints ---
 @app.post("/users", status_code=status.HTTP_201_CREATED)
@@ -291,7 +277,6 @@ async def get_user(username: str):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
-
 
 @app.post("/users/{username}/updatePoints", response_model=dict)
 async def update_user_points(
@@ -465,8 +450,7 @@ async def get_all_users():
         return users
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
-    
+  
 # Get user's lists with restaurant details
 @app.get("/users/{username}/lists/details")
 async def get_user_lists_with_details(username: str):
@@ -490,135 +474,7 @@ async def get_user_lists_with_details(username: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
-# --- Original Playlist Endpoints ---
-@app.post("/users/{username}/playlists", status_code=status.HTTP_201_CREATED)
-async def create_playlist(username: str, playlist: PlaylistCreate):
-    try:
-        user_doc = db.collection("users").document(username).get()
-        if not user_doc.exists:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"User '{username}' not found"
-            )
-
-        if playlist.username != username:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Cannot create playlist for another user"
-            )
-
-        playlist_ref = db.collection("users").document(username).collection("playlists").document()
-        
-        playlist_data = {
-            **playlist.dict(),
-            "id": playlist_ref.id,
-            "createdAt": datetime.utcnow().isoformat()
-        }
-
-        playlist_ref.set(playlist_data)
-
-        db.collection("users").document(username).update({
-            "playlists": firestore.ArrayUnion([playlist_ref.id])
-        })
-
-        return {
-            "message": "Playlist created successfully",
-            "id": playlist_ref.id
-        }
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-
-@app.get("/users/{username}/playlists", response_model=List[PlaylistRead])
-async def get_user_playlists(username: str):
-    try:
-        user_doc = db.collection("users").document(username).get()
-        if not user_doc.exists:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"User '{username}' not found"
-            )
-
-        playlists = db.collection("users").document(username).collection("playlists").get()
-        return [validate_and_serialize(doc.to_dict()) for doc in playlists]
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-
-@app.get("/users/{username}/playlists/{playlist_id}", response_model=PlaylistRead)
-async def get_playlist(username: str, playlist_id: str):
-    try:
-        doc = db.collection("users").document(username).collection("playlists").document(playlist_id).get()
-        if not doc.exists:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Playlist not found"
-            )
-        return validate_and_serialize(doc.to_dict())
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-
-@app.put("/users/{username}/playlists/{playlist_id}")
-async def update_playlist(username: str, playlist_id: str, playlist: PlaylistCreate):
-    try:
-        playlist_ref = db.collection("users").document(username).collection("playlists").document(playlist_id)
-        if not playlist_ref.get().exists:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Playlist not found"
-            )
-
-        playlist_ref.update(playlist.dict())
-        return {"message": "Playlist updated successfully"}
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-
-@app.delete("/users/{username}/playlists/{playlist_id}")
-async def delete_playlist(username: str, playlist_id: str):
-    try:
-        user_ref = db.collection("users").document(username)
-        playlist_ref = user_ref.collection("playlists").document(playlist_id)
-
-        if not playlist_ref.get().exists:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Playlist not found"
-            )
-
-        playlist_ref.delete()
-
-        user_ref.update({
-            "playlists": firestore.ArrayRemove([playlist_id])
-        })
-
-        return {"message": "Playlist deleted successfully"}
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-
-@app.get("/users/{username}/lists", response_model=List[PlaylistRead])
+@app.get("/users/{username}/lists", response_model=List[RestaurantListRead])
 async def get_user_lists(username: str):
     try:
         user_doc = db.collection("users").document(username).get()
@@ -638,7 +494,7 @@ async def get_user_lists(username: str):
             detail=str(e)
         )
 
-@app.get("/users/{username}/lists/{list_id}", response_model=PlaylistRead)
+@app.get("/users/{username}/lists/{list_id}", response_model=RestaurantListRead)
 async def get_playlist(username: str, list_id: str):
     try:
         doc = db.collection("users").document(username).collection("lists").document(list_id).get()
@@ -657,7 +513,7 @@ async def get_playlist(username: str, list_id: str):
         )
 
 @app.put("/users/{username}/lists/{list_id}")
-async def update_playlist(username: str, list_id: str, playlist: PlaylistCreate):
+async def update_playlist(username: str, list_id: str, playlist: RestaurantListCreate):
     try:
         playlist_ref = db.collection("users").document(username).collection("lists").document(list_id)
         if not playlist_ref.get().exists:
@@ -675,7 +531,6 @@ async def update_playlist(username: str, list_id: str, playlist: PlaylistCreate)
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
-
 
 @app.post("/users/{username}/lists/{list_id}/restaurants/add")
 async def add_place_to_restaurants(username: str, list_id: str, body: dict):
@@ -712,8 +567,6 @@ async def add_place_to_restaurants(username: str, list_id: str, body: dict):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred: {str(e)}"
         )
-
-
 
 @app.delete("/users/{username}/lists/{list_id}")
 async def delete_playlist(username: str, list_id: str):
@@ -780,8 +633,6 @@ async def refresh_restaurant_cache(background_tasks: BackgroundTasks):
     background_tasks.add_task(update_cache)
     return {"message": "Cache refresh started"}
 
-
-
 @app.get("/restaurants", response_model=List[dict])
 async def get_restaurants(
     search: Optional[str] = None,
@@ -842,15 +693,10 @@ async def get_restaurants(
             detail=f"Error retrieving restaurants: {str(e)}"
         )
 
-
-
-
-
 # Fallback function for when cache fails
 async def get_restaurants_from_firestore():
     restaurants = db.collection("restaurants").get()
     return [validate_and_serialize(doc.to_dict()) for doc in restaurants]
-
 
 @app.get("/restaurants/search", response_model=List[dict])
 async def search_restaurants(
@@ -913,11 +759,6 @@ async def search_restaurants(
             detail=f"Failed to search restaurants: {str(e)}"
         )
 
-
-
-
-
-
 @app.get("/restaurants/popular", response_model=List[dict])
 async def get_popular_restaurants(limit: int = 10):
     """
@@ -956,12 +797,6 @@ async def get_popular_restaurants(limit: int = 10):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve popular restaurants: {str(e)}"
         )
-
-
-
-
-
-
 
 @app.get("/restaurants/nearby")
 async def get_nearby_restaurants(lat: float, lng: float, radius_km: float = 2.0):
@@ -1020,11 +855,6 @@ async def get_nearby_restaurants(lat: float, lng: float, radius_km: float = 2.0)
             detail=f"Failed to retrieve nearby restaurants: {str(e)}"
         )
 
-
-
-
-
-
 @app.get("/restaurants/{place_id}")
 async def get_restaurant(place_id: str):
     """
@@ -1063,46 +893,192 @@ async def get_restaurant(place_id: str):
             detail=f"Failed to retrieve restaurant: {str(e)}"
         )
 
-
-
-
-
-
 # --- New Restaurant List Endpoints ---
-@app.post("/users/{username}/lists", status_code=status.HTTP_201_CREATED)
-async def create_restaurant_list(username: str, restaurant_list: RestaurantListCreate):
+
+#allLists endpoints
+@app.post("/allLists", status_code=status.HTTP_201_CREATED)
+async def create_global_restaurant_list(restaurant_list: RestaurantListCreate):
     try:
-        user_doc = db.collection("users").document(username).get()
+        # Verify the user exists before creating the list
+        user_doc = db.collection("users").document(restaurant_list.username).get()
         if not user_doc.exists:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"User '{username}' not found"
+                detail=f"User '{restaurant_list.username}' not found"
             )
 
-        if restaurant_list.username != username:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Cannot create list for another user"
-            )
+        # Use the provided ID from the client if it exists
+        list_ref = db.collection("allLists").document(restaurant_list.id)
 
-        list_ref = db.collection("users").document(username).collection("lists").document()
-        
+        # Prepare list data with additional global list fields
         list_data = {
             **restaurant_list.dict(),
-            "id": list_ref.id,
-            "createdAt": datetime.utcnow().isoformat()
+            "createdAt": datetime.utcnow().isoformat(),
+            "num_likes": 0,  # Initialize likes to 0
+            "favorited_by": [],  # Initialize empty list of users who favorited
         }
 
+        # Set the document in allLists collection
         list_ref.set(list_data)
 
-        db.collection("users").document(username).update({
-            "lists": firestore.ArrayUnion([list_ref.id])
+        return {
+            "message": "Global restaurant list created successfully",
+            "id": restaurant_list.id
+        }
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )  
+
+@app.get("/allLists", response_model=List[RestaurantListRead])
+async def get_all_restaurant_lists():
+    try:
+        # Retrieve all documents from the allLists collection
+        lists_ref = db.collection("allLists")
+        lists = lists_ref.get()
+        
+        # Convert Firestore documents to dictionaries and validate
+        all_lists = [
+            validate_and_serialize(doc.to_dict()) 
+            for doc in lists 
+            if doc.exists
+        ]
+        
+        # Optional: Sort lists by creation date (most recent first)
+        all_lists.sort(
+            key=lambda x: x.get('createdAt', ''), 
+            reverse=True
+        )
+        
+        return all_lists
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@app.get("/allLists/paginated", response_model=Dict[str, Any])
+async def get_paginated_restaurant_lists(
+    page: int = 1, 
+    page_size: int = 10,
+    sort_by: str = 'createdAt',
+    order: str = 'desc'
+):
+    try:
+        lists_ref = db.collection("allLists")
+        
+        # Apply sorting
+        query = lists_ref.order_by(sort_by, direction=firestore.Query.DESCENDING)
+        
+        # Apply pagination
+        offset = (page - 1) * page_size
+        lists = query.limit(page_size).offset(offset).get()
+        
+        # Total count for pagination metadata
+        total_count = len(list(lists_ref.get()))
+        
+        # Convert to list and validate
+        paginated_lists = [
+            validate_and_serialize(doc.to_dict()) 
+            for doc in lists 
+            if doc.exists
+        ]
+        
+        return {
+            "lists": paginated_lists,
+            "page": page,
+            "page_size": page_size,
+            "total_count": total_count,
+            "total_pages": math.ceil(total_count / page_size)
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@app.get("/allLists/filtered", response_model=List[RestaurantListRead])
+async def get_filtered_restaurant_lists(
+    username: Optional[str] = None,
+    min_likes: Optional[int] = None,
+    color: Optional[str] = None
+):
+    try:
+        lists_ref = db.collection("allLists")
+        query = lists_ref
+        
+        # Apply filters
+        if username:
+            query = query.where('username', '==', username)
+        
+        if min_likes is not None:
+            query = query.where('num_likes', '>=', min_likes)
+        
+        if color:
+            query = query.where('color', '==', color)
+        
+        lists = query.get()
+        
+        filtered_lists = [
+            validate_and_serialize(doc.to_dict()) 
+            for doc in lists 
+            if doc.exists
+        ]
+        
+        return filtered_lists
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@app.get("/allLists/{list_id}", response_model=RestaurantListRead)
+async def get_restaurant_list_by_id(list_id: str):
+    try:
+        # Reference the specific document in allLists collection
+        list_ref = db.collection("allLists").document(list_id)
+        list_doc = list_ref.get()
+
+        # Check if the document exists
+        if not list_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Restaurant list with ID '{list_id}' not found"
+            )
+
+        # Get the list data and validate
+        list_data = list_doc.to_dict()
+        
+        # Optional: Fetch full restaurant details
+        full_restaurants = []
+        for place_id in list_data.get('restaurants', []):
+            try:
+                # Fetch full restaurant details from restaurants collection
+                restaurant_ref = db.collection("restaurants").document(place_id)
+                restaurant_doc = restaurant_ref.get()
+                
+                if restaurant_doc.exists:
+                    full_restaurant = restaurant_doc.to_dict()
+                    full_restaurants.append(full_restaurant)
+            except Exception as e:
+                # Log the error but continue processing
+                print(f"Error fetching restaurant {place_id}: {e}")
+
+        # Create a validated response
+        validated_list = validate_and_serialize({
+            **list_data,
+            'full_restaurants': full_restaurants  # Optional: include full restaurant details
         })
 
-        return {
-            "message": "Restaurant list created successfully",
-            "id": list_ref.id
-        }
+        return validated_list
+
     except HTTPException as he:
         raise he
     except Exception as e:
@@ -1111,6 +1087,161 @@ async def create_restaurant_list(username: str, restaurant_list: RestaurantListC
             detail=str(e)
         )
 
+@app.post("/allLists/{list_id}/like")
+async def like_restaurant_list(
+    list_id: str, 
+    username: str = Body(...),
+    unlike: bool = Body(False, embed=True)
+):
+    try:
+        # Reference the specific list
+        list_ref = db.collection("allLists").document(list_id)
+        list_doc = list_ref.get()
+
+        if not list_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Restaurant list with ID '{list_id}' not found"
+            )
+
+        # Get current list data
+        list_data = list_doc.to_dict()
+        favorited_by = list_data.get('favorited_by', [])
+        num_likes = list_data.get('num_likes', 0)
+
+        # Update like status
+        if unlike and username in favorited_by:
+            favorited_by.remove(username)
+            num_likes = max(0, num_likes - 1)
+        elif not unlike and username not in favorited_by:
+            favorited_by.append(username)
+            num_likes += 1
+
+        # Update the document
+        list_ref.update({
+            'favorited_by': favorited_by,
+            'num_likes': num_likes
+        })
+
+        return {
+            "message": "List liked/unliked successfully",
+            "num_likes": num_likes,
+            "favorited_by": favorited_by
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@app.delete("/allLists/{list_id}")
+async def delete_restaurant_list(
+    list_id: str, 
+    username: str
+):
+    try:
+        # Reference the specific list
+        list_ref = db.collection("allLists").document(list_id)
+        list_doc = list_ref.get()
+
+        if not list_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Restaurant list with ID '{list_id}' not found"
+            )
+
+        # Check if the user is the author
+        list_data = list_doc.to_dict()
+        if list_data.get('username') != username:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not authorized to delete this list"
+            )
+
+        # Delete from allLists
+        list_ref.delete()
+
+        # Optional: Delete from user's personal lists
+        user_list_ref = db.collection("users").document(username).collection("lists").document(list_id)
+        user_list_ref.delete()
+
+        return {"message": "List deleted successfully"}
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@app.get("/popularLists", response_model=List[RestaurantListRead])
+async def get_popular_restaurant_lists():
+    try:
+        # Retrieve all documents from the allLists collection
+        lists_ref = db.collection("allLists")
+        lists = lists_ref.get()
+        
+        # Convert Firestore documents to dictionaries and validate
+        all_lists = [
+            validate_and_serialize(doc.to_dict()) 
+            for doc in lists 
+            if doc.exists
+        ]
+        
+        # Sort by 'likes' in descending order and return the top 5
+        popular_lists = sorted(
+            all_lists, 
+            key=lambda x: x.get('likes', 0), 
+            reverse=True
+        )[:5]
+        
+        return popular_lists
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+#users/{username}/lists endpoints
+@app.post("/users/{username}/lists", status_code=status.HTTP_201_CREATED)
+async def create_restaurant_list(username: str, restaurant_list: RestaurantListCreate):
+    try:
+        # Verify the user exists
+        user_doc = db.collection("users").document(username).get()
+        if not user_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User '{username}' not found"
+            )
+
+        # Use the same ID provided by the client
+        list_ref = db.collection("users").document(username).collection("lists").document(restaurant_list.id)
+
+        # Prepare list data (specific to user's list)
+        list_data = {
+            **restaurant_list.dict(),
+            "createdAt": datetime.utcnow().isoformat(),
+        }
+
+        # Save the list under the user's document
+        list_ref.set(list_data)
+
+        return {
+            "message": "User restaurant list created successfully",
+            "id": restaurant_list.id
+        }
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+    
 @app.get("/users/{username}/lists", response_model=List[RestaurantListRead])
 async def get_user_restaurant_lists(username: str):
     try:
@@ -1130,6 +1261,7 @@ async def get_user_restaurant_lists(username: str):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
 @app.put("/users/{username}/lists/{list_id}")
 async def update_restaurant_list(username: str, list_id: str, restaurant_list: RestaurantListCreate):
     try:
@@ -1182,12 +1314,6 @@ async def delete_restaurant_list(username: str, list_id: str):
             detail=str(e)
         )
 
-
-
-
-
-
-
 @app.get("/users/{username}/lists/{list_id}/restaurants", response_model=List[Restaurant])
 async def get_restaurants_in_list(username: str, list_id: str):
     try:
@@ -1218,8 +1344,8 @@ async def get_restaurants_in_list(username: str, list_id: str):
                 restaurant_data["id"] = restaurant_doc.id
                 restaurants.append(Restaurant(**restaurant_data))
         
-        return restaurants
-        
+        return restaurants   
+    
     except HTTPException as he:
         raise he
     except Exception as e:
@@ -1228,10 +1354,7 @@ async def get_restaurants_in_list(username: str, list_id: str):
             detail=str(e)
         )
 
-
-
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
-
 
 @app.get("/restaurant-photo/{place_id}")
 async def get_restaurant_photo(place_id: str):
@@ -1272,6 +1395,7 @@ async def get_restaurant_photo(place_id: str):
             status_code=500,
             detail=f"Failed to fetch photo: {str(e)}",
         )
+
 @app.get("/restaurant-photos/{place_id}")
 async def get_restaurant_photos(place_id: str, limit: int = 5):
     try:
@@ -1314,7 +1438,6 @@ async def get_restaurant_photos(place_id: str, limit: int = 5):
             status_code=500,
             detail=f"Failed to fetch photos: {str(e)}",
         )
-
 
 #review endpoints:
 @app.post("/admin/refresh-reviews-cache")
