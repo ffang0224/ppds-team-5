@@ -198,7 +198,7 @@ class RestaurantListBase(BaseModel):
     username: str
 
 class RestaurantListCreate(RestaurantListBase):
-    id: str  # Explicitly require an ID
+    # id: str  # Explicitly require an ID
     createdAt: Optional[str] = Field(default_factory=lambda: datetime.utcnow().isoformat())
 
 class RestaurantListRead(RestaurantListBase):
