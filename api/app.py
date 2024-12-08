@@ -577,34 +577,6 @@ async def add_place_to_restaurants(username: str, list_id: str, body: dict):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred: {str(e)}"
         )
-
-@app.delete("/users/{username}/lists/{list_id}")
-async def delete_playlist(username: str, list_id: str):
-    try:
-        user_ref = db.collection("users").document(username)
-        playlist_ref = user_ref.collection("lists").document(list_id)
-
-        if not playlist_ref.get().exists:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Playlist not found"
-            )
-
-        playlist_ref.delete()
-
-        user_ref.update({
-            "lists": firestore.ArrayRemove([list_id])
-        })
-
-        return {"message": "Playlist deleted successfully"}
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-        
 @app.post("/admin/refresh-restaurant-cache")
 async def refresh_restaurant_cache(background_tasks: BackgroundTasks):
 
