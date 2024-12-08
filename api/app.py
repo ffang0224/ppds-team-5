@@ -538,19 +538,33 @@ async def add_place_to_restaurants(username: str, list_id: str, body: dict):
                 detail="Place ID is required."
             )
 
-        list_ref = db.collection("users").document(username).collection("lists").document(list_id)
-        list_doc = list_ref.get()
+        # Get references to both collections
+        user_list_ref = db.collection("users").document(username).collection("lists").document(list_id)
+        global_list_ref = db.collection("allLists").document(list_id)
 
-        if not list_doc.exists:
+        # Verify list exists in user's collection
+        user_list_doc = user_list_ref.get()
+        if not user_list_doc.exists:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"List '{list_id}' not found for user '{username}'."
             )
 
-        # Update the array
-        list_ref.update({
+        # Use batch to update both collections
+        batch = db.batch()
+
+        # Update user's list
+        batch.update(user_list_ref, {
             "restaurants": firestore.ArrayUnion([place_id])
         })
+
+        # Update global list
+        batch.update(global_list_ref, {
+            "restaurants": firestore.ArrayUnion([place_id])
+        })
+
+        # Commit the batch
+        batch.commit()
 
         return {
             "message": f"Place ID '{place_id}' successfully added to the list '{list_id}'."
