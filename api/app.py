@@ -1204,7 +1204,7 @@ async def get_popular_restaurant_lists():
 
 #users/{username}/lists endpoints
 @app.post("/users/{username}/lists", status_code=status.HTTP_201_CREATED)
-async def create_restaurant_list(username: str, restaurant_list: RestaurantListBase):  # Change from RestaurantListCreate to RestaurantListBase
+async def create_restaurant_list(username: str, restaurant_list: RestaurantListBase):
     try:
         # Verify the user exists
         user_doc = db.collection("users").document(username).get()
@@ -1216,20 +1216,38 @@ async def create_restaurant_list(username: str, restaurant_list: RestaurantListB
 
         # Generate new document reference with auto-generated ID
         list_ref = db.collection("users").document(username).collection("lists").document()
-        
-        # Prepare list data with the auto-generated ID
+        list_id = list_ref.id
+
+        # Prepare list data
         list_data = {
             **restaurant_list.dict(),
-            "id": list_ref.id,  # Use Firestore's auto-generated ID
+            "id": list_id,
             "createdAt": datetime.utcnow().isoformat(),
         }
 
-        # Save the list under the user's document
-        list_ref.set(list_data)
+        # Prepare global list data
+        global_list_data = {
+            **list_data,
+            "num_likes": 0,
+            "favorited_by": [],
+        }
+
+        # Use a batch write to ensure both operations succeed or both fail
+        batch = db.batch()
+        
+        # Add to user's lists
+        batch.set(list_ref, list_data)
+        
+        # Add to global lists with same ID
+        global_ref = db.collection("allLists").document(list_id)
+        batch.set(global_ref, global_list_data)
+
+        # Commit the batch
+        batch.commit()
 
         return {
-            "message": "User restaurant list created successfully",
-            "id": list_ref.id
+            "message": "Restaurant list created successfully",
+            "id": list_id
         }
 
     except HTTPException as he:
