@@ -1305,21 +1305,32 @@ async def delete_restaurant_list(username: str, list_id: str):
         # Get refs
         user_ref = db.collection("users").document(username)
         list_ref = user_ref.collection("lists").document(list_id)
+        global_list_ref = db.collection("allLists").document(list_id)
 
-        # Verify list exists
-        if not list_ref.get().exists:
+        # Verify list exists and belongs to user
+        list_doc = list_ref.get()
+        if not list_doc.exists:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Restaurant list not found"
             )
 
-        # Delete list
-        list_ref.delete()
+        # Use batch to delete from both collections
+        batch = db.batch()
+
+        # Delete from user's lists collection
+        batch.delete(list_ref)
+
+        # Delete from global lists collection
+        batch.delete(global_list_ref)
 
         # Update user's lists array
-        user_ref.update({
+        batch.update(user_ref, {
             "lists": firestore.ArrayRemove([list_id])
         })
+
+        # Commit the batch
+        batch.commit()
 
         return {"message": "Restaurant list deleted successfully"}
     except HTTPException as he:
