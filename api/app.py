@@ -1188,6 +1188,61 @@ async def get_popular_restaurant_lists():
             detail=str(e)
         )
 
+@app.post("/lists/{list_id}/like", status_code=status.HTTP_200_OK)
+async def toggle_list_like(list_id: str, data: dict = Body(...)):
+    username = data.get('username')
+    if not username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username is required"
+        )
+    
+    try:
+        # Reference to the global list document
+        list_ref = db.collection("allLists").document(list_id)
+        list_doc = list_ref.get()
+
+        if not list_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="List not found"
+            )
+
+        # Get current list data
+        list_data = list_doc.to_dict()
+        
+        # Initialize favorited_by if not exists
+        if 'favorited_by' not in list_data:
+            list_data['favorited_by'] = []
+        
+        # Toggle like
+        if username in list_data['favorited_by']:
+            # Unlike
+            list_data['favorited_by'].remove(username)
+            list_data['num_likes'] -= 1
+        else:
+            # Like
+            list_data['favorited_by'].append(username)
+            list_data['num_likes'] += 1
+
+        # Update the document
+        list_ref.update({
+            'favorited_by': list_data['favorited_by'],
+            'num_likes': list_data['num_likes']
+        })
+
+        return {
+            "message": "List like toggled successfully",
+            "liked": username in list_data['favorited_by'],
+            "num_likes": list_data['num_likes']
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
 #users/{username}/lists endpoints
 @app.post("/users/{username}/lists", status_code=status.HTTP_201_CREATED)
 async def create_restaurant_list(username: str, restaurant_list: RestaurantListBase):
@@ -1244,9 +1299,29 @@ async def create_restaurant_list(username: str, restaurant_list: RestaurantListB
             detail=str(e)
         )
     
+# @app.get("/users/{username}/lists", response_model=List[RestaurantListRead])
+# async def get_user_restaurant_lists(username: str):
+#     try:
+#         user_doc = db.collection("users").document(username).get()
+#         if not user_doc.exists:
+#             raise HTTPException(
+#                 status_code=status.HTTP_404_NOT_FOUND,
+#                 detail=f"User '{username}' not found"
+#             )
+
+#         lists = db.collection("users").document(username).collection("lists").get()
+#         return [validate_and_serialize(doc.to_dict()) for doc in lists]
+#     except HTTPException as he:
+#         raise he
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=str(e)
+#         )
 @app.get("/users/{username}/lists", response_model=List[RestaurantListRead])
 async def get_user_restaurant_lists(username: str):
     try:
+        # Verify the user exists
         user_doc = db.collection("users").document(username).get()
         if not user_doc.exists:
             raise HTTPException(
@@ -1254,8 +1329,29 @@ async def get_user_restaurant_lists(username: str):
                 detail=f"User '{username}' not found"
             )
 
-        lists = db.collection("users").document(username).collection("lists").get()
-        return [validate_and_serialize(doc.to_dict()) for doc in lists]
+        # Fetch user's lists
+        user_lists = db.collection("users").document(username).collection("lists").get()
+
+        # Fetch corresponding global data from allLists
+        user_list_ids = [doc.id for doc in user_lists]
+        global_lists_ref = db.collection("allLists")
+        global_lists = [
+            doc.to_dict()
+            for doc in global_lists_ref.where("id", "in", user_list_ids).stream()
+        ]
+
+        # Combine data to include global fields
+        combined_lists = []
+        for user_list_doc in user_lists:
+            user_list_data = user_list_doc.to_dict()
+            global_data = next(
+                (g for g in global_lists if g.get("id") == user_list_data.get("id")), {}
+            )
+            combined_data = {**user_list_data, **global_data}
+            combined_lists.append(validate_and_serialize(combined_data))
+
+        return combined_lists
+
     except HTTPException as he:
         raise he
     except Exception as e:
