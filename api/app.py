@@ -230,14 +230,19 @@ async def create_user(user: UserCreate):
                 "reviewPoints": 0
             },
             "playlists": [],
-            "lists": []  # Added for restaurant lists
+            "lists": [],
+            "achievements": user.achievements if hasattr(user, 'achievements') else [],
         }
 
         db.collection("users").document(user.username).set(user_data)
-        
+
+        # Grant "first_account_creation" achievement
+        new_achievements = await check_and_award_achievements(user.username, "first_account_creation")
+
         return {
             "message": "User created successfully",
-            "username": user.username
+            "username": user.username,
+            "newAchievements": new_achievements,
         }
 
     except HTTPException as he:
@@ -246,8 +251,9 @@ async def create_user(user: UserCreate):
         print(f"Error creating user: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail=str(e),
         )
+
 
 @app.get("/users/{username}", response_model=UserRead)
 async def get_user(username: str):
@@ -1663,6 +1669,45 @@ async def add_achievement(achievement: Achievement):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to add achievement: {str(e)}"
         )
+
+
+
+
+async def check_and_award_achievements(username: str, activity: str):
+    """
+    Check if a user qualifies for new achievements based on an activity
+    and add them to the user's profile.
+    """
+    try:
+        # Fetch user document
+        user_ref = db.collection("users").document(username)
+        user_doc = user_ref.get()
+        if not user_doc.exists:
+            raise HTTPException(status_code=404, detail=f"User {username} not found")
+
+        user_data = user_doc.to_dict()
+        current_achievements = set(user_data.get("achievements", []))
+
+        # Fetch achievements matching the activity
+        achievements_ref = db.collection("achievements")
+        query = achievements_ref.where("activity", "==", activity)
+        achievements = [doc.to_dict() for doc in query.stream()]
+
+        new_achievements = []
+        for achievement in achievements:
+            # Add repeatable achievements or non-repeatable ones not yet earned
+            if achievement["repeatable"] or achievement["id"] not in current_achievements:
+                current_achievements.add(achievement["id"])
+                new_achievements.append(achievement["id"])
+
+        # Update user document with new achievements
+        if new_achievements:
+            user_ref.update({"achievements": list(current_achievements)})
+
+        return new_achievements
+    except Exception as e:
+        print(f"Error checking achievements: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 
