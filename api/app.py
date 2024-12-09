@@ -130,6 +130,7 @@ class UserBase(BaseModel):
     playlists: List[str] = Field(default_factory=list)
     lists: List[str] = Field(default_factory=list)  # Added for restaurant lists
     emailVerified: bool = False
+    numOfLists: int = 0
 
 class UserUpdateRequest(BaseModel):
     firstName: Optional[str] = None
@@ -232,6 +233,7 @@ async def create_user(user: UserCreate):
             "playlists": [],
             "lists": [],
             "achievements": user.achievements if hasattr(user, 'achievements') else [],
+            "numOfLists": 0,
         }
 
         db.collection("users").document(user.username).set(user_data)
@@ -1276,49 +1278,67 @@ async def create_restaurant_list(username: str, restaurant_list: RestaurantListB
                 detail=f"User '{username}' not found"
             )
 
-        # Generate new document reference with auto-generated ID
-        list_ref = db.collection("users").document(username).collection("lists").document()
-        list_id = list_ref.id
+        # Fetch user data
+        user_data = user_doc.to_dict()
+        current_num_of_lists = user_data.get("numOfLists", 0)
+        achievements = user_data.get("achievements", [])
 
-        # Prepare list data
+        # Check if this is the user's first list
+        is_first_list = current_num_of_lists == 0 and "first_list_created" not in achievements
+
+        # Generate new document reference with auto-generated ID
+        user_list_ref = db.collection("users").document(username).collection("lists").document()
+        list_id = user_list_ref.id
+
+        # Prepare list data for user and global collections
         list_data = {
             **restaurant_list.dict(),
             "id": list_id,
             "createdAt": datetime.utcnow().isoformat(),
         }
-
-        # Prepare global list data
         global_list_data = {
             **list_data,
             "num_likes": 0,
             "favorited_by": [],
         }
 
-        # Use a batch write to ensure both operations succeed or both fail
+        # Use batch writes for atomicity
         batch = db.batch()
-        
-        # Add to user's lists
-        batch.set(list_ref, list_data)
-        
-        # Add to global lists with same ID
-        global_ref = db.collection("allLists").document(list_id)
-        batch.set(global_ref, global_list_data)
+
+        # Add list to user's collection
+        batch.set(user_list_ref, list_data)
+
+        # Add list to global collection
+        global_list_ref = db.collection("allLists").document(list_id)
+        batch.set(global_list_ref, global_list_data)
+
+        # Increment numOfLists for the user
+        user_ref = db.collection("users").document(username)
+        batch.update(user_ref, {"numOfLists": firestore.Increment(1)})
 
         # Commit the batch
         batch.commit()
 
+        # Award achievement if it's the user's first list
+        new_achievements = []
+        if is_first_list:
+            new_achievements = await check_and_award_achievements(username, "first_list_created")
+
         return {
             "message": "Restaurant list created successfully",
-            "id": list_id
+            "id": list_id,
+            "newAchievements": new_achievements,
         }
 
     except HTTPException as he:
         raise he
     except Exception as e:
+        print(f"Error creating restaurant list: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail=str(e),
         )
+
     
 # @app.get("/users/{username}/lists", response_model=List[RestaurantListRead])
 # async def get_user_restaurant_lists(username: str):
@@ -1401,7 +1421,7 @@ async def update_restaurant_list(username: str, list_id: str, restaurant_list: R
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
-
+    
 @app.delete("/users/{username}/lists/{list_id}")
 async def delete_restaurant_list(username: str, list_id: str):
     try:
@@ -1427,9 +1447,9 @@ async def delete_restaurant_list(username: str, list_id: str):
         # Delete from global lists collection
         batch.delete(global_list_ref)
 
-        # Update user's lists array
+        # Update numOfLists in user's document
         batch.update(user_ref, {
-            "lists": firestore.ArrayRemove([list_id])
+            "numOfLists": firestore.Increment(-1)
         })
 
         # Commit the batch
@@ -1443,6 +1463,7 @@ async def delete_restaurant_list(username: str, list_id: str):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
 
 @app.get("/users/{username}/lists/{list_id}/restaurants", response_model=List[Restaurant])
 async def get_restaurants_in_list(username: str, list_id: str):
