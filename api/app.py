@@ -1207,13 +1207,13 @@ async def toggle_list_like(list_id: str, data: dict = Body(...)):
         # Reference to the global list document
         list_ref = db.collection("allLists").document(list_id)
         list_doc = list_ref.get()
-
+        
         if not list_doc.exists:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="List not found"
             )
-
+        
         # Get current list data
         list_data = list_doc.to_dict()
         
@@ -1226,29 +1226,44 @@ async def toggle_list_like(list_id: str, data: dict = Body(...)):
             # Unlike
             list_data['favorited_by'].remove(username)
             list_data['num_likes'] -= 1
+            
+            # Remove from user's lists
+            user_lists_ref = db.collection("users").document(username).collection("lists")
+            query = user_lists_ref.where("id", "==", list_id).limit(1)
+            liked_list_docs = query.get()
+            
+            for doc in liked_list_docs:
+                doc.reference.delete()
         else:
             # Like
             list_data['favorited_by'].append(username)
             list_data['num_likes'] += 1
-
+            
+            # Add to user's lists
+            user_lists_ref = db.collection("users").document(username).collection("lists")
+            user_lists_ref.add({
+                **list_data,
+                "is_favorite": True
+            })
+        
         # Update the document
         list_ref.update({
             'favorited_by': list_data['favorited_by'],
             'num_likes': list_data['num_likes']
         })
-
+        
         return {
             "message": "List like toggled successfully",
             "liked": username in list_data['favorited_by'],
             "num_likes": list_data['num_likes']
         }
-
+    
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
-
+    
 #users/{username}/lists endpoints
 @app.post("/users/{username}/lists", status_code=status.HTTP_201_CREATED)
 async def create_restaurant_list(username: str, restaurant_list: RestaurantListBase):
