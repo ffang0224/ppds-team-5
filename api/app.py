@@ -1716,7 +1716,7 @@ class Achievement(BaseModel):
     id: str
     points: int
     description: str
-    repeatable: bool
+
     
 @app.post("/achievements/add")
 async def add_achievement(achievement: Achievement):
@@ -1737,6 +1737,7 @@ async def add_achievement(achievement: Achievement):
         )
 
 
+
 async def check_and_award_achievements(username: str, achievement_id: str):
     # Fetch user document
     user_ref = db.collection("users").document(username)
@@ -1755,24 +1756,18 @@ async def check_and_award_achievements(username: str, achievement_id: str):
 
     achievement = achievement_doc.to_dict()
 
-    # Check if the achievement can be added
-    new_achievements = []
-    total_points_awarded = 0
+    # Only add the achievement if it hasn't been awarded yet
+    if achievement_id in current_achievements:
+        return []  # No new achievements
 
-    if achievement["repeatable"] or achievement_id not in current_achievements:
-        current_achievements.add(achievement_id)
-        new_achievements.append(achievement_id)
-        total_points_awarded += achievement["points"]
+    # Add the achievement and update points
+    current_achievements.add(achievement_id)
+    user_ref.update({
+        "achievements": list(current_achievements),
+        "points.generalPoints": firestore.Increment(achievement["points"])
+    })
 
-    # Update user achievements and points
-    if new_achievements:
-        user_ref.update({
-            "achievements": list(current_achievements),
-            "points.generalPoints": firestore.Increment(total_points_awarded)
-        })
-
-    return new_achievements
-
+    return [achievement_id]
 
 
 
