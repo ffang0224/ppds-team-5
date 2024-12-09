@@ -558,6 +558,15 @@ async def add_place_to_restaurants(username: str, list_id: str, body: dict):
                 detail=f"List '{list_id}' not found for user '{username}'."
             )
 
+        # Check if the restaurant is already in the list
+        user_list_data = user_list_doc.to_dict()
+        current_restaurants = user_list_data.get("restaurants", [])
+        if place_id in current_restaurants:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Restaurant is already in the list."
+            )
+
         # Use batch to update both collections
         batch = db.batch()
 
@@ -574,8 +583,12 @@ async def add_place_to_restaurants(username: str, list_id: str, body: dict):
         # Commit the batch
         batch.commit()
 
+        # Award points for adding a restaurant (repeatable achievement)
+        new_points = await award_points_for_action(username, "add_restaurant")
+
         return {
-            "message": f"Place ID '{place_id}' successfully added to the list '{list_id}'."
+            "message": f"Place ID '{place_id}' successfully added to the list '{list_id}'.",
+            "newPoints": new_points
         }
 
     except HTTPException as he:
@@ -585,6 +598,9 @@ async def add_place_to_restaurants(username: str, list_id: str, body: dict):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred: {str(e)}"
         )
+
+
+
 @app.post("/admin/refresh-restaurant-cache")
 async def refresh_restaurant_cache(background_tasks: BackgroundTasks):
 
