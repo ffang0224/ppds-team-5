@@ -1686,43 +1686,42 @@ async def add_achievement(achievement: Achievement):
         )
 
 
+async def check_and_award_achievements(username: str, achievement_id: str):
+    # Fetch user document
+    user_ref = db.collection("users").document(username)
+    user_doc = user_ref.get()
+    if not user_doc.exists:
+        raise HTTPException(status_code=404, detail=f"User {username} not found")
 
+    user_data = user_doc.to_dict()
+    current_achievements = set(user_data.get("achievements", []))
 
-async def check_and_award_achievements(username: str, activity: str):
-    """
-    Check if a user qualifies for new achievements based on an activity
-    and add them to the user's profile.
-    """
-    try:
-        # Fetch user document
-        user_ref = db.collection("users").document(username)
-        user_doc = user_ref.get()
-        if not user_doc.exists:
-            raise HTTPException(status_code=404, detail=f"User {username} not found")
+    # Fetch the achievement by id
+    achievement_ref = db.collection("achievements").document(achievement_id)
+    achievement_doc = achievement_ref.get()
+    if not achievement_doc.exists:
+        raise HTTPException(status_code=404, detail=f"Achievement '{achievement_id}' not found")
 
-        user_data = user_doc.to_dict()
-        current_achievements = set(user_data.get("achievements", []))
+    achievement = achievement_doc.to_dict()
 
-        # Fetch achievements matching the activity
-        achievements_ref = db.collection("achievements")
-        query = achievements_ref.where("activity", "==", activity)
-        achievements = [doc.to_dict() for doc in query.stream()]
+    # Check if the achievement can be added
+    new_achievements = []
+    total_points_awarded = 0
 
-        new_achievements = []
-        for achievement in achievements:
-            # Add repeatable achievements or non-repeatable ones not yet earned
-            if achievement["repeatable"] or achievement["id"] not in current_achievements:
-                current_achievements.add(achievement["id"])
-                new_achievements.append(achievement["id"])
+    if achievement["repeatable"] or achievement_id not in current_achievements:
+        current_achievements.add(achievement_id)
+        new_achievements.append(achievement_id)
+        total_points_awarded += achievement["points"]
 
-        # Update user document with new achievements
-        if new_achievements:
-            user_ref.update({"achievements": list(current_achievements)})
+    # Update user achievements and points
+    if new_achievements:
+        user_ref.update({
+            "achievements": list(current_achievements),
+            "points.generalPoints": firestore.Increment(total_points_awarded)
+        })
 
-        return new_achievements
-    except Exception as e:
-        print(f"Error checking achievements: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return new_achievements
+
 
 
 
