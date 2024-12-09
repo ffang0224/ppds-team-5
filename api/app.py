@@ -1319,10 +1319,23 @@ async def create_restaurant_list(username: str, restaurant_list: RestaurantListB
         # Commit the batch
         batch.commit()
 
-        # Award achievement if it's the user's first list
+        # Award achievements for first list and milestone lists
         new_achievements = []
         if is_first_list:
-            new_achievements = await check_and_award_achievements(username, "first_list_created")
+            new_achievements.extend(await check_and_award_achievements(username, "first_list_created"))
+
+        # Check for milestone achievements
+        new_num_of_lists = current_num_of_lists + 1
+        milestones = {
+            10: "add_10_lists",
+            20: "add_20_lists",
+            30: "add_30_lists",
+            40: "add_40_lists",
+        }
+        if new_num_of_lists in milestones:
+            milestone_achievement = milestones[new_num_of_lists]
+            if milestone_achievement not in achievements:
+                new_achievements.extend(await check_and_award_achievements(username, milestone_achievement))
 
         return {
             "message": "Restaurant list created successfully",
@@ -1338,6 +1351,7 @@ async def create_restaurant_list(username: str, restaurant_list: RestaurantListB
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
         )
+
 
     
 # @app.get("/users/{username}/lists", response_model=List[RestaurantListRead])
