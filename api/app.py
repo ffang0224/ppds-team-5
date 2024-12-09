@@ -1266,6 +1266,8 @@ async def toggle_list_like(list_id: str, data: dict = Body(...)):
             detail=str(e)
         )
     
+
+
 #users/{username}/lists endpoints
 @app.post("/users/{username}/lists", status_code=status.HTTP_201_CREATED)
 async def create_restaurant_list(username: str, restaurant_list: RestaurantListBase):
@@ -1337,10 +1339,14 @@ async def create_restaurant_list(username: str, restaurant_list: RestaurantListB
             if milestone_achievement not in achievements:
                 new_achievements.extend(await check_and_award_achievements(username, milestone_achievement))
 
+        # Award points for adding a list (repeatable achievement)
+        new_points = await award_points_for_action(username, "add_list")
+
         return {
             "message": "Restaurant list created successfully",
             "id": list_id,
             "newAchievements": new_achievements,
+            "newPoints": new_points,
         }
 
     except HTTPException as he:
@@ -1353,26 +1359,11 @@ async def create_restaurant_list(username: str, restaurant_list: RestaurantListB
         )
 
 
-    
-# @app.get("/users/{username}/lists", response_model=List[RestaurantListRead])
-# async def get_user_restaurant_lists(username: str):
-#     try:
-#         user_doc = db.collection("users").document(username).get()
-#         if not user_doc.exists:
-#             raise HTTPException(
-#                 status_code=status.HTTP_404_NOT_FOUND,
-#                 detail=f"User '{username}' not found"
-#             )
 
-#         lists = db.collection("users").document(username).collection("lists").get()
-#         return [validate_and_serialize(doc.to_dict()) for doc in lists]
-#     except HTTPException as he:
-#         raise he
-#     except Exception as e:
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail=str(e)
-#         )
+    
+
+
+
 @app.get("/users/{username}/lists", response_model=List[RestaurantListRead])
 async def get_user_restaurant_lists(username: str):
     try:
@@ -1719,6 +1710,40 @@ async def add_achievement(achievement: Achievement):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to add achievement: {str(e)}"
         )
+
+
+async def award_points_for_action(username: str, achievement_id: str) -> int:
+    """
+    Function to award points for repeatable actions like adding a list.
+    """
+    try:
+        # Fetch the achievement
+        achievement_ref = db.collection("achievements").document(achievement_id)
+        achievement_doc = achievement_ref.get()
+        if not achievement_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Achievement '{achievement_id}' not found"
+            )
+
+        achievement = achievement_doc.to_dict()
+        points = achievement.get("points", 0)
+
+        # Increment the user's points
+        user_ref = db.collection("users").document(username)
+        user_ref.update({
+            "points.generalPoints": firestore.Increment(points)
+        })
+
+        return points
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to award points for action: {str(e)}"
+        )
+
+
 
 
 async def check_and_award_achievements(username: str, achievement_id: str):
