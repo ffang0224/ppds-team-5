@@ -290,7 +290,7 @@ async def update_user_points(
     try:
         # Get user reference
         users_ref = db.collection('users')
-        user_query = users_ref.where('username', '==', username).limit(1)
+        user_query = users_ref.filter('username', '==', username).limit(1)
         user_docs = user_query.stream()
         
         # Get the user document
@@ -1094,6 +1094,8 @@ async def get_restaurant_list_by_id(list_id: str):
             detail=str(e)
         )
 
+
+
 @app.post("/allLists/{list_id}/like")
 async def like_restaurant_list(
     list_id: str, 
@@ -1101,7 +1103,7 @@ async def like_restaurant_list(
     unlike: bool = Body(False, embed=True)
 ):
     try:
-        # Reference the specific list
+        # Reference the specific list in `allLists`
         list_ref = db.collection("allLists").document(list_id)
         list_doc = list_ref.get()
 
@@ -1115,16 +1117,37 @@ async def like_restaurant_list(
         list_data = list_doc.to_dict()
         favorited_by = list_data.get('favorited_by', [])
         num_likes = list_data.get('num_likes', 0)
+        new_achievements = []
+
+        # Reference the user's `lists` collection
+        user_lists_ref = db.collection("users").document(username).collection("lists")
+        liked_list_doc = user_lists_ref.document(list_id)
 
         # Update like status
         if unlike and username in favorited_by:
             favorited_by.remove(username)
             num_likes = max(0, num_likes - 1)
+
+            # Remove from the user's `lists` collection if unliked
+            liked_list_doc.delete()
+
         elif not unlike and username not in favorited_by:
             favorited_by.append(username)
             num_likes += 1
 
-        # Update the document
+            # Add to the user's `lists` collection if liked
+            liked_list_doc.set({
+                "list_id": list_id,
+                "name": list_data.get("name", ""),
+                "description": list_data.get("description", ""),
+                "createdAt": list_data.get("createdAt", datetime.utcnow().isoformat()),
+                "author": list_data.get("author", ""),
+            })
+
+            # Check and award "give_first_like" achievement
+            new_achievements = await check_and_award_achievements(username, "give_first_like")
+
+        # Update the `allLists` document
         list_ref.update({
             'favorited_by': favorited_by,
             'num_likes': num_likes
@@ -1133,7 +1156,8 @@ async def like_restaurant_list(
         return {
             "message": "List liked/unliked successfully",
             "num_likes": num_likes,
-            "favorited_by": favorited_by
+            "favorited_by": favorited_by,
+            "newAchievements": new_achievements,
         }
 
     except Exception as e:
@@ -1141,6 +1165,10 @@ async def like_restaurant_list(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
+
+
+
 
 @app.delete("/allLists/{list_id}")
 async def delete_restaurant_list(
@@ -1212,6 +1240,8 @@ async def get_popular_restaurant_lists():
             detail=str(e)
         )
 
+
+# This seems to be the real one for liking
 @app.post("/lists/{list_id}/like", status_code=status.HTTP_200_OK)
 async def toggle_list_like(list_id: str, data: dict = Body(...)):
     username = data.get('username')
@@ -1239,6 +1269,8 @@ async def toggle_list_like(list_id: str, data: dict = Body(...)):
         if 'favorited_by' not in list_data:
             list_data['favorited_by'] = []
         
+        new_achievements = []  # To store awarded achievements
+
         # Toggle like
         if username in list_data['favorited_by']:
             # Unlike
@@ -1263,6 +1295,9 @@ async def toggle_list_like(list_id: str, data: dict = Body(...)):
                 **list_data,
                 "is_favorite": True
             })
+
+            # Award achievement for giving the first like
+            new_achievements = await check_and_award_achievements(username, "give_first_like")
         
         # Update the document
         list_ref.update({
@@ -1273,7 +1308,8 @@ async def toggle_list_like(list_id: str, data: dict = Body(...)):
         return {
             "message": "List like toggled successfully",
             "liked": username in list_data['favorited_by'],
-            "num_likes": list_data['num_likes']
+            "num_likes": list_data['num_likes'],
+            "newAchievements": new_achievements
         }
     
     except Exception as e:
@@ -1281,6 +1317,7 @@ async def toggle_list_like(list_id: str, data: dict = Body(...)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
     
 #users/{username}/lists endpoints
 @app.post("/users/{username}/lists", status_code=status.HTTP_201_CREATED)
@@ -1748,7 +1785,7 @@ async def check_and_award_achievements(username: str, achievement_id: str):
     user_data = user_doc.to_dict()
     current_achievements = set(user_data.get("achievements", []))
 
-    # Fetch the achievement by id
+    # Fetch the achievement document by its ID
     achievement_ref = db.collection("achievements").document(achievement_id)
     achievement_doc = achievement_ref.get()
     if not achievement_doc.exists:
@@ -1762,14 +1799,14 @@ async def check_and_award_achievements(username: str, achievement_id: str):
 
     # Add the achievement and update points
     current_achievements.add(achievement_id)
+    print(achievement_id)
+    print(current_achievements)
     user_ref.update({
         "achievements": list(current_achievements),
         "points.generalPoints": firestore.Increment(achievement["points"])
     })
 
     return [achievement_id]
-
-
 
 
 
