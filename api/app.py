@@ -1636,6 +1636,37 @@ async def get_restaurant_reviews(place_id: str):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve reviews: {str(e)}"
         )
+    
+
+
+# Pydantic model for achievement
+class Achievement(BaseModel):
+    id: str
+    points: int
+    description: str
+    repeatable: bool
+    
+@app.post("/achievements/add")
+async def add_achievement(achievement: Achievement):
+    try:
+        # Extract the id and other fields from the Achievement object
+        achievement_data = achievement.dict()
+        doc_id = achievement_data.pop("id")  # Extract the id and remove it from the document data
+
+        # Use doc_id as the document ID and add the rest of the data
+        db.collection("achievements").document(doc_id).set(achievement_data)
+
+        return {"message": f"Achievement '{doc_id}' added successfully."}
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to add achievement: {str(e)}"
+        )
+
+
+
+
 
 if __name__ == "__main__":
     import uvicorn
