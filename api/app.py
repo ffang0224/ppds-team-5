@@ -1855,18 +1855,17 @@ async def check_and_award_achievements(username: str, achievement_id: str):
 
     # Only add the achievement if it hasn't been awarded yet
     if achievement_id in current_achievements:
-        return []  # No new achievements
+        return {}  # No new achievements
 
     # Add the achievement and update points
     current_achievements.add(achievement_id)
-    print(achievement_id)
-    print(current_achievements)
     user_ref.update({
         "achievements": list(current_achievements),
         "points.generalPoints": firestore.Increment(achievement["points"])
     })
 
-    return [achievement_id]
+    # Return minimal data for frontend
+    return {"id": achievement_id, "points": achievement["points"]}
 
 
 
