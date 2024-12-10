@@ -583,12 +583,8 @@ async def add_place_to_restaurants(username: str, list_id: str, body: dict):
         # Commit the batch
         batch.commit()
 
-        # Award points for adding a restaurant (repeatable achievement)
-        new_points = await award_points_for_action(username, "add_restaurant")
-
         return {
-            "message": f"Place ID '{place_id}' successfully added to the list '{list_id}'.",
-            "newPoints": new_points
+            "message": f"Place ID '{place_id}' successfully added to the list '{list_id}'."
         }
 
     except HTTPException as he:
