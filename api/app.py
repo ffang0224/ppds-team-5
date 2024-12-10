@@ -1441,10 +1441,16 @@ async def create_restaurant_list(username: str, restaurant_list: RestaurantListB
             30: "add_30_lists",
             40: "add_40_lists",
         }
+        # if new_num_of_lists in milestones:
+        #     milestone_achievement = milestones[new_num_of_lists]
+        #     if milestone_achievement not in achievements:
+        #         new_achievements.extend(await check_and_award_achievements(username, milestone_achievement))
+
         if new_num_of_lists in milestones:
             milestone_achievement = milestones[new_num_of_lists]
-            if milestone_achievement not in achievements:
-                new_achievements.extend(await check_and_award_achievements(username, milestone_achievement))
+            achievement_data = await check_and_award_achievements(username, milestone_achievement)
+            if achievement_data:
+                new_achievements.append(achievement_data)
 
         return {
             "message": "Restaurant list created successfully",
@@ -1830,7 +1836,6 @@ async def add_achievement(achievement: Achievement):
         )
 
 
-
 async def check_and_award_achievements(username: str, achievement_id: str):
     # Fetch user document
     user_ref = db.collection("users").document(username)
@@ -1851,19 +1856,17 @@ async def check_and_award_achievements(username: str, achievement_id: str):
 
     # Only add the achievement if it hasn't been awarded yet
     if achievement_id in current_achievements:
-        return {}  # No new achievements
+        return []  # Return an empty list if no new achievements
 
     # Add the achievement and update points
     current_achievements.add(achievement_id)
     user_ref.update({
         "achievements": list(current_achievements),
-        "points.generalPoints": firestore.Increment(achievement["points"])
+        "points.generalPoints": firestore.Increment(achievement["points"]),
     })
 
-    # Return minimal data for frontend
-    return {"id": achievement_id, "points": achievement["points"]}
-
-
+    # Return a list containing the new achievement
+    return [{"id": achievement_id, "points": achievement["points"]}]
 
 if __name__ == "__main__":
     import uvicorn
