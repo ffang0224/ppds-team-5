@@ -1264,45 +1264,62 @@ async def toggle_list_like(list_id: str, data: dict = Body(...)):
         
         # Get current list data
         list_data = list_doc.to_dict()
+        if not list_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="List data is empty"
+            )
         
         # Initialize favorited_by if not exists
         if 'favorited_by' not in list_data:
             list_data['favorited_by'] = []
         
         new_achievements = []  # To store awarded achievements
+        user_lists_ref = db.collection("users").document(username).collection("lists")
 
         # Toggle like
-        user_lists_ref = db.collection("users").document(username).collection("lists")
         if username in list_data['favorited_by']:
             # Unlike
             list_data['favorited_by'].remove(username)
             list_data['num_likes'] -= 1
-            
+
             # Remove from user's lists
-            query = user_lists_ref.where("id", "==", list_id).limit(1)
-            liked_list_docs = query.get()
-            
-            for doc in liked_list_docs:
-                doc.reference.delete()
+            liked_list_ref = user_lists_ref.document(list_id)
+            liked_list_ref.delete()
+
+            # Update the author of the list
+            author = list_data.get("author")
+
+            author_lists_ref = db.collection("users").document(author).collection("lists")
+            author_list_ref = author_lists_ref.document(list_id)
+            author_list_ref.set(list_data)  # Copy the data from allLists
         else:
             # Like
             list_data['favorited_by'].append(username)
             list_data['num_likes'] += 1
-            
-            # Add to user's lists
-            user_lists_ref.add({
-                **list_data,
-                "is_favorite": True
-            })
+
+            # Add to user's lists with matching ID
+            liked_list_ref = user_lists_ref.document(list_id)
+
+            liked_list_ref.set(list_data)
+
+            # Update the author of the list
+            author = list_data.get("author")
+
+            author_lists_ref = db.collection("users").document(author).collection("lists")
+            author_list_ref = author_lists_ref.document(list_id)
+            author_list_ref.set(list_data)  # Copy the data from allLists
 
             # Award achievement for giving the first like
-            new_achievements.extend(await check_and_award_achievements(username, "give_first_like"))
-
-            # Count total liked lists for milestones
-            # Total lists in user's subcollection
+            give_milestones = {
+                1: "give_first_like",
+                10: "like_10_lists",
+                20: "like_20_lists",
+                30: "like_30_lists",
+                40: "like_40_lists"
+            }
             total_user_lists = len(list(user_lists_ref.stream()))
             
-            # Get user's `numOfLists` (number of their own lists)
             user_doc = db.collection("users").document(username).get()
             if not user_doc.exists:
                 raise HTTPException(
@@ -1312,21 +1329,34 @@ async def toggle_list_like(list_id: str, data: dict = Body(...)):
             user_data = user_doc.to_dict()
             num_of_own_lists = user_data.get("numOfLists", 0)
 
-            # Calculate only liked lists
             total_liked_lists = total_user_lists - num_of_own_lists
+            if total_liked_lists in give_milestones:
+                give_achievement = give_milestones[total_liked_lists]
+                new_achievements.extend(await check_and_award_achievements(username, give_achievement))
 
-            # Milestones for liking other lists
-            milestones = {
-                10: "like_10_lists",
-                20: "like_20_lists",
-                30: "like_30_lists",
-                40: "like_40_lists"
-            }
-            if total_liked_lists in milestones:
-                milestone_achievement = milestones[total_liked_lists]
-                new_achievements.extend(await check_and_award_achievements(username, milestone_achievement))
-        
-        # Update the document
+        # Calculate total likes received for the author
+        author = list_data.get("author")
+        author_lists_ref = db.collection("users").document(author).collection("lists")
+
+        total_likes_received = 0
+        for author_list_doc in author_lists_ref.stream():
+            author_list_data = author_list_doc.to_dict()
+            if author_list_data.get("author") == author:
+                total_likes_received += author_list_data.get("num_likes", 0)
+        print(total_likes_received)
+        # Check for milestone achievements for received likes
+        receive_milestones = {
+            1: "receive_first_like",
+            10: "receive_10_likes",
+            20: "receive_20_likes",
+            30: "receive_30_likes",
+            40: "receive_40_likes"
+        }
+        if total_likes_received in receive_milestones:
+            receive_achievement = receive_milestones[total_likes_received]
+            new_achievements.extend(await check_and_award_achievements(author, receive_achievement))
+
+        # Update the global list document
         list_ref.update({
             'favorited_by': list_data['favorited_by'],
             'num_likes': list_data['num_likes']
@@ -1344,6 +1374,7 @@ async def toggle_list_like(list_id: str, data: dict = Body(...)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
 
 
 
