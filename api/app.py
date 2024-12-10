@@ -519,15 +519,54 @@ async def get_playlist(username: str, list_id: str):
 @app.put("/users/{username}/lists/{list_id}")
 async def update_playlist(username: str, list_id: str, playlist: RestaurantListBase):
     try:
-        playlist_ref = db.collection("users").document(username).collection("lists").document(list_id)
-        if not playlist_ref.get().exists:
+        # Get references to both collections
+        user_list_ref = db.collection("users").document(username).collection("lists").document(list_id)
+        global_list_ref = db.collection("allLists").document(list_id)
+        
+        # Verify the user list exists
+        user_list_doc = user_list_ref.get()
+        if not user_list_doc.exists:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Playlist not found"
+                detail="Playlist not found in user's collection"
             )
-
-        playlist_ref.update(playlist.dict())
-        return {"message": "Playlist updated successfully"}
+            
+        # Verify the global list exists
+        global_list_doc = global_list_ref.get()
+        if not global_list_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Playlist not found in global collection"
+            )
+            
+        # Get current data to preserve certain fields
+        global_list_data = global_list_doc.to_dict()
+        
+        # Create update data while preserving important fields
+        update_data = {
+            **playlist.dict(),
+            "id": list_id,  # Preserve the ID
+            "num_likes": global_list_data.get("num_likes", 0),  # Preserve like count
+            "favorited_by": global_list_data.get("favorited_by", []),  # Preserve users who liked
+        }
+        
+        # Use a batch write to update both collections atomically
+        batch = db.batch()
+        
+        # Update user's collection
+        batch.update(user_list_ref, update_data)
+        
+        # Update global collection
+        batch.update(global_list_ref, update_data)
+        
+        # Commit the batch
+        batch.commit()
+        
+        return {
+            "message": "Playlist updated successfully in both collections",
+            "updated_data": update_data
+        }
+        
     except HTTPException as he:
         raise he
     except Exception as e:
