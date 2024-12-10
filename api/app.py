@@ -1850,7 +1850,26 @@ async def get_user_achievements(username: str):
         )
 
 
+@app.get("/achievements", response_model=List[dict])
+async def get_all_achievements():
+    """
+    Retrieve all achievements from the achievements collection.
+    """
+    try:
+        achievements_ref = db.collection("achievements").stream()
+        achievements = []
 
+        for doc in achievements_ref:
+            achievement_data = doc.to_dict()
+            achievement_data["id"] = doc.id  # Include the document ID
+            achievements.append(achievement_data)
+
+        return achievements
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch achievements: {str(e)}"
+        )
 
 
     
