@@ -1808,6 +1808,54 @@ async def get_restaurant_reviews(place_id: str):
     
 
 
+@app.get("/users/{username}/achievements", response_model=List[dict])
+async def get_user_achievements(username: str):
+    """
+    Fetch achievements for a specific user from the Firestore database, including achievement IDs.
+    """
+    try:
+        # Reference the user document
+        user_ref = db.collection("users").document(username)
+        user_doc = user_ref.get()
+
+        # Check if user exists
+        if not user_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User '{username}' not found"
+            )
+
+        # Retrieve achievements array from the user document
+        user_data = user_doc.to_dict()
+        achievements = user_data.get("achievements", [])
+
+        # Fetch achievement details from the achievements collection
+        achievements_ref = db.collection("achievements")
+        achievement_details = []
+
+        for achievement_id in achievements:
+            achievement_doc = achievements_ref.document(achievement_id).get()
+            if achievement_doc.exists:
+                achievement_details.append({
+                    "id": achievement_id,
+                    **achievement_doc.to_dict()
+                })
+
+        return achievement_details
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch achievements: {str(e)}"
+        )
+
+
+
+
+
+    
+
+
 # Pydantic model for achievement
 class Achievement(BaseModel):
     id: str
