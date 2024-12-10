@@ -1328,7 +1328,15 @@ async def toggle_list_like(list_id: str, data: dict = Body(...)):
             total_liked_lists = total_user_lists - num_of_own_lists
             if total_liked_lists in give_milestones:
                 give_achievement = give_milestones[total_liked_lists]
-                new_achievements.extend(await check_and_award_achievements(username, give_achievement))
+                achievement_data = await check_and_award_achievements(username, give_achievement)
+                if achievement_data:
+                    # Rename keys in achievement_data
+                    achievement_data = {
+                        ('giver_achievement_id' if k == 'id' else 'giver_points' if k == 'points' else k): v
+                        for k, v in achievement_data.items()
+                    }
+                    achievement_data["giver"] = username
+                    new_achievements.append(achievement_data)
 
         # Calculate total likes received for the author
         author = list_data.get("author")
@@ -1339,7 +1347,7 @@ async def toggle_list_like(list_id: str, data: dict = Body(...)):
             author_list_data = author_list_doc.to_dict()
             if author_list_data.get("author") == author:
                 total_likes_received += author_list_data.get("num_likes", 0)
-        print(total_likes_received)
+
         # Check for milestone achievements for received likes
         receive_milestones = {
             1: "receive_first_like",
@@ -1350,14 +1358,23 @@ async def toggle_list_like(list_id: str, data: dict = Body(...)):
         }
         if total_likes_received in receive_milestones:
             receive_achievement = receive_milestones[total_likes_received]
-            new_achievements.extend(await check_and_award_achievements(author, receive_achievement))
+            achievement_data = await check_and_award_achievements(author, receive_achievement)
+            if achievement_data:
+                # Rename keys in achievement_data
+                achievement_data = {
+                    ('receiver_achievement_id' if k == 'id' else 'receiver_points' if k == 'points' else k): v
+                    for k, v in achievement_data.items()
+                }
+                achievement_data["author"] = author
+                new_achievements.append(achievement_data)
 
+        print(new_achievements)
         # Update the global list document
         list_ref.update({
             'favorited_by': list_data['favorited_by'],
             'num_likes': list_data['num_likes']
         })
-        
+
         return {
             "message": "List like toggled successfully",
             "liked": username in list_data['favorited_by'],
