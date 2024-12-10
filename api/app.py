@@ -1428,10 +1428,12 @@ async def create_restaurant_list(username: str, restaurant_list: RestaurantListB
         # Commit the batch
         batch.commit()
 
-        # Award achievements for first list and milestone lists
-        new_achievements = []
+        new_achievements = []  # Initialize as a list
+
         if is_first_list:
-            new_achievements.extend(await check_and_award_achievements(username, "first_list_created"))
+            achievement_data = await check_and_award_achievements(username, "first_list_created")
+            if achievement_data:
+                new_achievements.append(achievement_data)  # Append achievement as an object
 
         # Check for milestone achievements
         new_num_of_lists = current_num_of_lists + 1
@@ -1443,14 +1445,16 @@ async def create_restaurant_list(username: str, restaurant_list: RestaurantListB
         }
         if new_num_of_lists in milestones:
             milestone_achievement = milestones[new_num_of_lists]
-            if milestone_achievement not in achievements:
-                new_achievements.extend(await check_and_award_achievements(username, milestone_achievement))
+            achievement_data = await check_and_award_achievements(username, milestone_achievement)
+            if achievement_data:
+                new_achievements.append(achievement_data)  # Append achievement as an object
 
         return {
             "message": "Restaurant list created successfully",
             "id": list_id,
-            "newAchievements": new_achievements,
+            "newAchievements": new_achievements,  # Ensure it's a list of objects
         }
+
 
     except HTTPException as he:
         raise he
@@ -1830,7 +1834,6 @@ async def add_achievement(achievement: Achievement):
         )
 
 
-
 async def check_and_award_achievements(username: str, achievement_id: str):
     # Fetch user document
     user_ref = db.collection("users").document(username)
@@ -1851,7 +1854,7 @@ async def check_and_award_achievements(username: str, achievement_id: str):
 
     # Only add the achievement if it hasn't been awarded yet
     if achievement_id in current_achievements:
-        return {}  # No new achievements
+        return None  # Return None if the achievement is already awarded
 
     # Add the achievement and update points
     current_achievements.add(achievement_id)
@@ -1860,9 +1863,8 @@ async def check_and_award_achievements(username: str, achievement_id: str):
         "points.generalPoints": firestore.Increment(achievement["points"])
     })
 
-    # Return minimal data for frontend
+    # Return the achievement as an object
     return {"id": achievement_id, "points": achievement["points"]}
-
 
 
 if __name__ == "__main__":
