@@ -2,22 +2,44 @@
 
 ## Features
 
-- Manage "Users", "Restaurants", "Playlists" and "Reviews" collections (modifiable) on a Google Firebase Firestore NoSQL database.
-- Add new users, restaurants or restaurant playlists.
+- Manage "Users," "Restaurants," "AllLists," and "Reviews" collections on a Google Firebase Firestore NoSQL database.
+- Add new users, restaurants, or restaurant lists.
 - View all existing data in the collections.
-- Update current information on the database.
-- User input for manual insertion of data.
-- Batch addition of data with CSV file.
+- Update existing information in the database.
+- Provide user input for manual data insertion.
+- Perform batch data additions using CSV files.
 
 ## Description of Our Data Model
 
-Our data model will be designed with a NoSQL type database. Our Foodify program will revolve around three main entities, users, restaurants, reviews and playlists, with the username attribute being the primary key for entities, users, restaurants, and playlists. The first entity is Users including attributes: username, email, firstName, and lastName (all of type string), playlists being an array of references to playlist objects where each playlist is referenced by a unique identifier, and lastly the points map, which is broken down into generalPoints, postPoints, and reviewPoints(all type int).
+Our data model is designed using a NoSQL database structure. The Foodify program revolves around four main entities: Users, Restaurants, Reviews, and allLists. The primary key for the Users, Restaurants, and allLists entities is the username attribute.
 
-The restaurants entity includes 5 attributes of type maps. First being, contact which stores a collection of email, phone, and website of the restaurant. Next, dietaryOptions which stores 5 booleans of the restaurant specificities, that are: Kosher, halal, gluten free, vegan, or vegetarian. Also, the features entity is split into 6 additional booleans for other additional features that are also important, these are: Delivery, dinein, outdoor seating, parking , takeout, and wifi. Hours will give us the open and close timing of every day of the week in type string. Lastly, location of type map, stores the address divided into address, vity, country, postal code, state all of type string, and ofcourse the latitude and longitude of type geopoint. The restaurant entity is more complex, moreover the remaining attributes are mentioned in the Firestore database you can hover over it to see its type, this paragraph just briefly describes some of its attributes.
+The Users entity includes the following attributes:
 
-The Reviews entity includes attributes commentAuthor (type string), restaurantId (string), and review (string). The source attribute identifies where the review comes from, such as maps, reddit, or instagram. Lastly, the entity records a stars value (number), out of a score of 5.
+username, email, firstName, and lastName (all of type string).
+playlists: an array of references to Playlist objects, where each playlist is identified by a unique ID.
+points: a map broken down into generalPoints, postPoints, and reviewPoints (all of type int).
+The Restaurants entity includes several attributes, many of which are maps:
 
-Lasly, our last entity which is the playlists entity, which is designed to organize restaurant collections, similar to music playlists in a way. This entity has attributes like author (type: string), which gives us the user who created the playlist, description (type: string) that gives a brief overview of the playlist, and name (type: string), which specifies the title of the playlist. The restaurants attribute is an array of references, with each element pointing to a specific restaurant entity from our restaurant entity.
+- Contact: Stores a collection of the restaurant’s email, phone, and website (all of type string).
+- Dietary Options: Contains five boolean attributes indicating if the restaurant caters to Kosher, Halal, Gluten-Free, Vegan, or Vegetarian preferences.
+- Features: Includes six boolean attributes for additional services: delivery, dineIn, outdoorSeating, parking, takeout, and wifi.
+- Hours: Stores the open and close times for each day of the week (type string).
+- Location: A map containing the address details, including address, city, state, country, postalCode (all of type string), and geographical coordinates (latitude and longitude of type GeoPoint).
+
+The Reviews entity includes the following attributes:
+
+- commentAuthor (type string): The author of the comment.
+- restaurantId (type string): A reference to the restaurant being reviewed.
+- review (type string): The content of the review.
+- source (type string): Indicates where the review originates, such as Google Maps, Reddit, or Instagram.
+- stars (type number): A rating out of 5.
+
+The allLists entity organizes collections of restaurants in a way similar to music playlists. It includes the following attributes:
+
+- author (type string): Identifies the user who created the playlist.
+- description (type string): Provides a brief overview of the playlist.
+- name (type string): Specifies the title of the playlist.
+- restaurants: An array of references, where each element points to a specific restaurant entity in the Restaurants collection.
 
 ## Why we chose a NoSQL type database over SQL
 
@@ -28,43 +50,40 @@ Our entities contain numerous references to other entities, and a NoSQL database
 - Python 3.13.0 or higher.
 - pip (Python package manager)
 - Google Firebase account
+- Google Cloud API Key
 
 ## Setup
 
-1. Clone this repository: \
+1. **Clone this repository**:  
    `git clone https://github.com/ffang0224/ppds-team-5.git`
 
-2. Navigate to the project directory:
+2. **Navigate to the project directory**:  
+   `cd path/to/ppds-team-5`
 
-```bash
-cd path/to/ppds-team-5
-```
+3. **Create a virtual environment (optional)**:
 
-3. Create a virtual environment (optional):
+   - On Windows:  
+     `python -m venv .venv`  
+     `.venv\Scripts\activate`
+   - On macOS and Linux:  
+     `python -m venv .venv`  
+     `source .venv/bin/activate`
 
-```python
-
-python -m venv .venv
-
-# On Windows:
-.venv\Scripts\activate
-
-# On macOS and Linux:
-source .venv/bin/activate
-
-```
-
-4. Install dependencies: \
+4. **Install dependencies**:  
    `pip install -r requirements.txt`
 
-5. Initialize a Firebase Firestore Instance and download credentials. \
-   Add credentials to the root folder with the name _"firebase_credentials.json"_. Credentials can be found under **Project Settings -> Service Accounts**
+5. **Set up Firebase Firestore**:
 
-6. Create .env file in "api" directory
-   Create the file and write the google maps api key. For example:
-   ```
-   GOOGLE_MAPS_API_KEY=YOUR_API_KEY_HERE
-   ```
+   - Initialize a Firebase Firestore instance.
+   - Download the Firebase Admin credentials from **Project Settings -> Service Accounts**.
+   - Save the credentials JSON file in the root folder with the name `firebase_credentials.json`.
+
+6. **Create a `.env` file** in the "api" directory:
+
+   - Add the Google Maps API key in the following format:
+     ```
+     GOOGLE_MAPS_API_KEY=YOUR_API_KEY_HERE
+     ```
 
 ## Script Usage
 
@@ -102,7 +121,7 @@ Enter your choice (1-19):
 
 ## API
 
-Our application provides API endpoints to manage users, reviews, playlists, and restaurants in the database. These endpoints allow adding new entries, updating existing ones, deleting entries, and retrieving information for all entities. Below are the key actions supported for each entity:
+Our application provides API endpoints to manage users, reviews, playlists, restaurants, and achievements in the database. These endpoints allow adding new entries, updating existing ones, deleting entries, and retrieving information for all entities. Below are the key actions supported for each entity:
 
 - **GET**: Retrieves an entry or lists all entries in the specified collection.
 
@@ -138,4 +157,3 @@ Contributions to improve the application are welcome. Please feel free to submit
 ## Licensing
 
 Available under the [MIT License](https://opensource.org/license/mit).
-
